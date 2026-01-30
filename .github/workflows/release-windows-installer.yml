@@ -45,9 +45,9 @@ jobs:
           "JAVA_FX_JMODS=$($dir.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Build and package (jpackage)
-        shell: pwsh
+        shell: cmd
         run: |
-          ./mvnw.cmd -B -DskipTests -Djavafx.jmods.path="$env:JAVA_FX_JMODS" package jpackage:jpackage
+          call mvnw.cmd -B -DskipTests "-Djavafx.jmods.path=%JAVA_FX_JMODS%" package jpackage:jpackage
 
       - name: Publish installer to Release
         uses: ncipollo/release-action@v1
