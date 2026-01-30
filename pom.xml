@@ -236,6 +236,11 @@
 						<module>javafx.fxml</module>
 						<module>javafx.graphics</module>
 					</addModules>
+					<options>
+						<option>--strip-debug</option>
+						<option>--no-man-pages</option>
+						<option>--no-header-files</option>
+					</options>
 				</configuration>
 			</plugin>
 		</plugins>

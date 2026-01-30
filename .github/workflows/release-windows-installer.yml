@@ -1,0 +1,51 @@
+name: Release Windows Installer
+
+on:
+  push:
+    tags:
+      - "LIMS_v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows-installer:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Download JavaFX jmods
+        shell: pwsh
+        run: |
+          $version = "21.0.2"
+          $url = "https://download.java.net/java/GA/javafx21.0.2/0dc89a29ffa34addbe3057926acea09a/GPL/openjfx-21.0.2_windows-x64_bin-jmods.zip"
+          $zipPath = Join-Path $env:RUNNER_TEMP "javafx-jmods.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zipPath
+          $extract = Join-Path $env:RUNNER_TEMP "javafx"
+          Expand-Archive -Path $zipPath -DestinationPath $extract
+          $dir = Get-ChildItem $extract -Directory | Select-Object -First 1
+          if (-not $dir) { throw "JavaFX jmods directory not found after extract." }
+          "JAVA_FX_JMODS=$($dir.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build and package (jpackage)
+        shell: pwsh
+        run: |
+          ./mvnw.cmd -B -DskipTests -Djavafx.jmods.path="$env:JAVA_FX_JMODS" package jpackage:jpackage
+
+      - name: Publish installer to Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "target/*.exe"
+          allowUpdates: true
+          replacesArtifacts: true
+          artifactErrorsFailBuild: true
+          token: ${{ secrets.GITHUB_TOKEN }}
