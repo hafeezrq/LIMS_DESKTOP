@@ -49,6 +49,19 @@ jobs:
         run: |
           call mvnw.cmd -B -DskipTests "-Djavafx.jmods.path=%JAVA_FX_JMODS%" package jpackage:jpackage
 
+      - name: Verify boot jar and installer
+        shell: cmd
+        run: |
+          dir target
+          if not exist "target\\*-boot.jar" (
+            echo Boot jar not found in target
+            exit /b 1
+          )
+          if not exist "target\\*.exe" (
+            echo Installer exe not found in target
+            exit /b 1
+          )
+
       - name: Publish installer to Release
         uses: ncipollo/release-action@v1
         with:
