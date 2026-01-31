@@ -243,6 +243,7 @@
 						<option>--win-dir-chooser</option>
 						<option>--win-menu</option>
 						<option>--win-shortcut</option>
+						<option>--win-console</option>
 					</options>
 				</configuration>
 			</plugin>
