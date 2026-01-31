@@ -53,8 +53,8 @@ jobs:
         shell: cmd
         run: |
           dir target
-          if not exist "target\\*-boot.jar" (
-            echo Boot jar not found in target
+          if not exist "target\\*.jar.original" (
+            echo Boot jar repackage did not run (missing .jar.original)
             exit /b 1
           )
           if not exist "target\\*.exe" (
