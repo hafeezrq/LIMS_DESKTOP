@@ -50,22 +50,17 @@ jobs:
           call mvnw.cmd -B -DskipTests "-Djavafx.jmods.path=%JAVA_FX_JMODS%" package jpackage:jpackage
 
       - name: Verify boot jar and installer
-        shell: cmd
+        shell: pwsh
         run: |
-          dir target
-          set FOUND_ORIG=
-          for %%f in (target\\*.jar.original) do set FOUND_ORIG=1
-          if not defined FOUND_ORIG (
-            echo Boot jar repackage did not run (missing .jar.original)
-            exit /b 1
-          )
-          set FOUND_EXE=
-          for %%f in (target\\*.exe) do set FOUND_EXE=1
-          if not defined FOUND_EXE (
-            echo Installer exe not found in target
-            exit /b 1
-          )
-          exit /b 0
+          Get-ChildItem -Path target | Format-Table -AutoSize
+          if (-not (Get-ChildItem -Path target -Filter "*.jar.original" -File)) {
+            Write-Error "Boot jar repackage did not run (missing .jar.original)"
+            exit 1
+          }
+          if (-not (Get-ChildItem -Path target -Filter "*.exe" -File)) {
+            Write-Error "Installer exe not found in target"
+            exit 1
+          }
 
       - name: Publish installer to Release
         uses: ncipollo/release-action@v1
