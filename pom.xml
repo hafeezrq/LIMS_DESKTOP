@@ -242,6 +242,9 @@
 						<module>javafx.controls</module>
 						<module>javafx.fxml</module>
 						<module>javafx.graphics</module>
+						<module>java.sql</module>
+						<module>java.naming</module>
+						<module>java.management</module>
 					</addModules>
 					<options>
 						<option>--strip-debug</option>

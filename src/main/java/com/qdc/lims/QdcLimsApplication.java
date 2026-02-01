@@ -1,13 +1,11 @@
 package com.qdc.lims;
 
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
 /**
  * Main entry point for the LIMS Spring Boot application.
  */
 @SpringBootApplication
-@EnableJpaRepositories(basePackages = "com.qdc.lims.repository")
 public class QdcLimsApplication {
 
 	/**
