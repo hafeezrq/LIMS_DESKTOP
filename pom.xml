@@ -242,10 +242,20 @@
 						<module>javafx.controls</module>
 						<module>javafx.fxml</module>
 						<module>javafx.graphics</module>
-						<module>java.sql</module>
-						<module>java.naming</module>
-						<module>java.management</module>
+						<module>java.compiler</module>
+						<module>java.desktop</module>
 						<module>java.instrument</module>
+						<module>java.management</module>
+						<module>java.net.http</module>
+						<module>java.prefs</module>
+						<module>java.rmi</module>
+						<module>java.scripting</module>
+						<module>java.security.jgss</module>
+						<module>java.sql</module>
+						<module>java.sql.rowset</module>
+						<module>java.naming</module>
+						<module>jdk.jfr</module>
+						<module>jdk.unsupported</module>
 					</addModules>
 					<options>
 						<option>--strip-debug</option>
