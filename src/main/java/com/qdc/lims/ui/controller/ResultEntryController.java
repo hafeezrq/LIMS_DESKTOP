@@ -15,8 +15,8 @@ import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
+import javafx.scene.input.KeyCode;
 import javafx.stage.Stage;
-import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -32,40 +32,28 @@ public class ResultEntryController {
 
     @FXML
     private Label orderInfoLabel;
-
     @FXML
     private Label mrnLabel;
-
     @FXML
     private Label nameLabel;
-
     @FXML
     private Label ageGenderLabel;
-
     @FXML
     private Label orderDateLabel;
-
     @FXML
     private TableView<LabResult> resultsTable;
-
     @FXML
     private TableColumn<LabResult, String> testNameColumn;
-
     @FXML
     private TableColumn<LabResult, String> resultValueColumn;
-
     @FXML
     private TableColumn<LabResult, String> unitColumn;
-
     @FXML
     private TableColumn<LabResult, String> referenceRangeColumn;
-
     @FXML
     private TableColumn<LabResult, String> statusColumn;
-
     @FXML
     private Label messageLabel;
-
     @FXML
     private Button saveButton;
 
@@ -75,6 +63,8 @@ public class ResultEntryController {
     private final LocaleFormatService localeFormatService;
     private final ReferenceRangeRepository referenceRangeRepository;
     private LabOrder currentOrder;
+
+    // Flag to prevent selection listener loops during programmatic navigation
     private boolean adjustingSelection = false;
 
     public ResultEntryController(LabOrderRepository orderRepository,
@@ -104,28 +94,28 @@ public class ResultEntryController {
         resultsTable.setEditable(true);
         resultsTable.getSelectionModel().setCellSelectionEnabled(true);
         resultsTable.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
+
+        // Selection Listener: Handles mouse clicks or manual selection changes
         resultsTable.getSelectionModel().selectedIndexProperty().addListener((obs, oldVal, newVal) -> {
-            if (adjustingSelection || newVal == null) {
+            if (adjustingSelection || newVal == null || newVal.intValue() < 0) {
                 return;
             }
+
             int row = newVal.intValue();
-            if (row < 0) {
-                return;
-            }
-            adjustingSelection = true;
             Platform.runLater(() -> {
-                resultsTable.requestFocus();
-                resultsTable.getSelectionModel().clearAndSelect(row, resultValueColumn);
-                resultsTable.getFocusModel().focus(row, resultValueColumn);
-                resultsTable.edit(row, resultValueColumn);
-                adjustingSelection = false;
+                if (resultsTable.getEditingCell() == null) {
+                    resultsTable.requestFocus();
+                    // Optional: specifically select the value column
+                    resultsTable.getSelectionModel().select(row, resultValueColumn);
+                    resultsTable.edit(row, resultValueColumn);
+                }
             });
         });
 
         testNameColumn.setCellValueFactory(
                 cellData -> new SimpleStringProperty(cellData.getValue().getTestDefinition().getTestName()));
 
-        // 1. RESULT VALUE COLUMN (With Navigation Fix)
+        // --- RESULT VALUE COLUMN ---
         resultValueColumn.setCellValueFactory(cellData -> {
             LabResult result = cellData.getValue();
             String value = result.getResultValue() != null ? result.getResultValue() : "";
@@ -143,21 +133,15 @@ public class ResultEntryController {
                     setText(null);
                     setGraphic(textField);
                     textField.selectAll();
-                    // Request focus for the text field immediately
-                    Platform.runLater(textField::requestFocus);
+                    Platform.runLater(() -> textField.requestFocus());
                 }
             }
 
             @Override
             public void cancelEdit() {
-                // Smart Cancel: If text changed, save it instead of reverting
-                if (textField != null && !textField.getText().equals(getItem())) {
-                    commitEdit(textField.getText());
-                } else {
-                    super.cancelEdit();
-                    setText(getItem());
-                    setGraphic(null);
-                }
+                super.cancelEdit();
+                setText(getItem());
+                setGraphic(null);
             }
 
             @Override
@@ -184,30 +168,30 @@ public class ResultEntryController {
                 textField = new TextField(getString());
                 textField.setMinWidth(this.getWidth() - this.getGraphicTextGap() * 2);
 
-                // --- NAVIGATION LOGIC ---
                 textField.setOnKeyPressed(event -> {
-                    if (event.getCode() == javafx.scene.input.KeyCode.ENTER
-                            || event.getCode() == javafx.scene.input.KeyCode.TAB
-                            || event.getCode() == javafx.scene.input.KeyCode.DOWN
-                            || event.getCode() == javafx.scene.input.KeyCode.UP) {
+                    if (event.getCode() == KeyCode.ENTER || event.getCode() == KeyCode.TAB
+                            || event.getCode() == KeyCode.DOWN || event.getCode() == KeyCode.UP) {
+
                         commitEdit(textField.getText());
-                        event.consume();
 
                         int delta;
-                        if (event.getCode() == javafx.scene.input.KeyCode.UP) {
+                        if (event.getCode() == KeyCode.UP) {
                             delta = -1;
-                        } else if (event.getCode() == javafx.scene.input.KeyCode.DOWN) {
+                        } else if (event.getCode() == KeyCode.DOWN) {
                             delta = 1;
                         } else {
-                            delta = event.isShiftDown() ? -1 : 1;
+                            delta = event.isShiftDown() ? -1 : 1; // Tab/Enter logic
                         }
+
                         navigateToRow(delta);
-                    } else if (event.getCode() == javafx.scene.input.KeyCode.ESCAPE) {
-                        super.cancelEdit();
+                        event.consume();
+                    } else if (event.getCode() == KeyCode.ESCAPE) {
+                        cancelEdit();
+                        event.consume();
                     }
                 });
 
-                // Focus Listener: Backup Save
+                // Focus lost: backup save
                 textField.focusedProperty().addListener((obs, wasFocused, isNowFocused) -> {
                     if (!isNowFocused && isEditing()) {
                         commitEdit(textField.getText());
@@ -222,65 +206,63 @@ public class ResultEntryController {
             private void navigateToRow(int delta) {
                 int currentRow = getTableRow().getIndex();
                 int targetRow = currentRow + delta;
+
                 if (targetRow < 0 || targetRow >= getTableView().getItems().size()) {
                     return;
                 }
 
                 adjustingSelection = true;
                 Platform.runLater(() -> {
-                    getTableView().requestFocus();
-                    getTableView().getSelectionModel().clearAndSelect(targetRow, getTableColumn());
-                    getTableView().scrollTo(targetRow);
-                    getTableView().getFocusModel().focus(targetRow, getTableColumn());
-                    Platform.runLater(() -> {
-                        getTableView().edit(targetRow, getTableColumn());
+                    try {
+                        getTableView().requestFocus();
+                        getTableView().getSelectionModel().clearAndSelect(targetRow, getTableColumn());
+                        getTableView().getFocusModel().focus(targetRow, getTableColumn());
+                        getTableView().scrollTo(targetRow);
+
+                        // Small nested delay ensures the commit is fully finished before the next edit
+                        // starts
+                        Platform.runLater(() -> {
+                            getTableView().edit(targetRow, getTableColumn());
+                            adjustingSelection = false;
+                        });
+                    } catch (Exception e) {
                         adjustingSelection = false;
-                    });
+                    }
                 });
             }
         });
 
-        // 2. COMMIT HANDLER (Pure Data Update - NO UI REFRESH HERE)
+        // Data update handler
         resultValueColumn.setOnEditCommit(event -> {
             LabResult result = event.getRowValue();
-            String newValue = event.getNewValue();
-
-            // Update Data
-            result.setResultValue(newValue);
+            result.setResultValue(event.getNewValue());
             autoCalculateStatus(result);
 
-            // --- FIX: VISUAL UPDATE TRICK ---
-            // Instead of refreshing the row (which kills the cursor),
-            // we force JUST the Status column to redraw by toggling visibility.
-            // This is instant and doesn't break focus.
+            // Toggle visibility to force status column to redraw instantly
             Platform.runLater(() -> {
                 statusColumn.setVisible(false);
                 statusColumn.setVisible(true);
             });
         });
 
-        // 3. UNIT COLUMN
         unitColumn.setCellValueFactory(
                 cellData -> new SimpleStringProperty(cellData.getValue().getTestDefinition().getUnit() != null
                         ? cellData.getValue().getTestDefinition().getUnit()
                         : ""));
 
-        // 4. REFERENCE RANGE COLUMN
         referenceRangeColumn.setCellValueFactory(cellData -> {
             TestDefinition test = cellData.getValue().getTestDefinition();
             ReferenceRange range = findMatchingRange(test, currentOrder != null ? currentOrder.getPatient() : null);
-            if (range == null) {
+            if (range == null)
                 return new SimpleStringProperty("N/A");
-            }
+
             String min = range.getMinVal() != null ? localeFormatService.formatNumber(range.getMinVal()) : "";
             String max = range.getMaxVal() != null ? localeFormatService.formatNumber(range.getMaxVal()) : "";
-            if (min.isEmpty() && max.isEmpty()) {
-                return new SimpleStringProperty("N/A");
-            }
-            return new SimpleStringProperty(min + " - " + max);
+
+            return (min.isEmpty() && max.isEmpty()) ? new SimpleStringProperty("N/A")
+                    : new SimpleStringProperty(min + " - " + max);
         });
 
-        // 5. STATUS COLUMN
         statusColumn.setCellValueFactory(cellData -> {
             if (cellData.getValue().isAbnormal()) {
                 return new SimpleStringProperty(cellData.getValue().getRemarks());
@@ -292,20 +274,15 @@ public class ResultEntryController {
             @Override
             protected void updateItem(String item, boolean empty) {
                 super.updateItem(item, empty);
-
-                // Always clear style first
                 setText(null);
                 setStyle("");
-
-                if (empty || item == null) {
-                    return;
-                }
-
-                setText(item);
-                if ("HIGH".equals(item) || "LOW".equals(item)) {
-                    setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-font-weight: bold;");
-                } else if ("Normal".equals(item)) {
-                    setStyle("-fx-background-color: #27ae60; -fx-text-fill: white; -fx-font-weight: bold;");
+                if (!empty && item != null) {
+                    setText(item);
+                    if ("HIGH".equals(item) || "LOW".equals(item)) {
+                        setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-font-weight: bold;");
+                    } else if ("Normal".equals(item)) {
+                        setStyle("-fx-background-color: #27ae60; -fx-text-fill: white; -fx-font-weight: bold;");
+                    }
                 }
             }
         });
@@ -315,42 +292,28 @@ public class ResultEntryController {
         if (currentOrder == null)
             return;
 
-        // Reload from database to get fresh data
         currentOrder = orderRepository.findById(currentOrder.getId())
                 .orElseThrow(() -> new RuntimeException("Order not found"));
 
-        // Check if this is editing a completed order
         boolean isEditMode = "COMPLETED".equals(currentOrder.getStatus());
 
-        // Set order info with appropriate label
-        if (isEditMode) {
-            orderInfoLabel.setText("Order #" + currentOrder.getId() + " - EDITING COMPLETED RESULTS");
-            // Change save button text for edit mode
-            if (saveButton != null) {
-                saveButton.setText("Save Corrections");
-            }
-        } else {
-            orderInfoLabel.setText("Order #" + currentOrder.getId() + " - Status: " + currentOrder.getStatus());
-            if (saveButton != null) {
-                saveButton.setText("Save Results");
-            }
-        }
+        orderInfoLabel.setText("Order #" + currentOrder.getId()
+                + (isEditMode ? " - EDITING COMPLETED" : " - Status: " + currentOrder.getStatus()));
+        if (saveButton != null)
+            saveButton.setText(isEditMode ? "Save Corrections" : "Save Results");
 
-        // Set patient info
         mrnLabel.setText(currentOrder.getPatient().getMrn());
         nameLabel.setText(currentOrder.getPatient().getFullName());
         ageGenderLabel.setText(currentOrder.getPatient().getAge() + " / " + currentOrder.getPatient().getGender());
-
         orderDateLabel.setText(localeFormatService.formatDateTime(currentOrder.getOrderDate()));
 
-        // Load results
         resultsTable.setItems(FXCollections.observableArrayList(currentOrder.getResults()));
 
-        // Auto-focus the first result cell for immediate data entry
+        // Initial Focus
         Platform.runLater(() -> {
             if (!resultsTable.getItems().isEmpty()) {
-                resultsTable.getSelectionModel().select(0);
-                resultsTable.getFocusModel().focus(0, resultValueColumn);
+                resultsTable.requestFocus();
+                resultsTable.getSelectionModel().select(0, resultValueColumn);
                 resultsTable.edit(0, resultValueColumn);
             }
         });
@@ -358,14 +321,13 @@ public class ResultEntryController {
 
     private void autoCalculateStatus(LabResult result) {
         String value = result.getResultValue();
-        if (value == null || value.trim().isEmpty()) {
+        if (value == null || value.trim().isEmpty())
             return;
-        }
 
         try {
             java.math.BigDecimal numValue = new java.math.BigDecimal(value.trim());
-            TestDefinition test = result.getTestDefinition();
-            ReferenceRange range = findMatchingRange(test, currentOrder != null ? currentOrder.getPatient() : null);
+            ReferenceRange range = findMatchingRange(result.getTestDefinition(),
+                    currentOrder != null ? currentOrder.getPatient() : null);
 
             if (range != null && range.getMinVal() != null && range.getMaxVal() != null) {
                 if (numValue.compareTo(range.getMinVal()) < 0) {
@@ -380,241 +342,106 @@ public class ResultEntryController {
                 }
             }
         } catch (NumberFormatException e) {
-            // Text result, mark as normal
             result.setAbnormal(false);
             result.setRemarks("");
         }
     }
 
     private ReferenceRange findMatchingRange(TestDefinition test, com.qdc.lims.entity.Patient patient) {
-        if (test == null || test.getId() == null) {
+        if (test == null || test.getId() == null)
             return null;
-        }
         var ranges = referenceRangeRepository.findByTestId(test.getId());
-        if (ranges == null || ranges.isEmpty()) {
+        if (ranges == null || ranges.isEmpty())
             return null;
-        }
+
         Integer age = patient != null ? patient.getAge() : null;
         String gender = patient != null ? patient.getGender() : null;
 
         return ranges.stream()
                 .filter(range -> matchesRange(range, age, gender))
-                .sorted((a, b) -> {
-                    int genderScoreA = genderScore(a, gender);
-                    int genderScoreB = genderScore(b, gender);
-                    if (genderScoreA != genderScoreB) {
-                        return Integer.compare(genderScoreB, genderScoreA);
-                    }
-                    Integer minA = a.getMinAge();
-                    Integer minB = b.getMinAge();
-                    if (minA == null && minB == null) {
-                        return 0;
-                    }
-                    if (minA == null) {
-                        return 1;
-                    }
-                    if (minB == null) {
-                        return -1;
-                    }
-                    return Integer.compare(minA, minB);
-                })
+                .sorted((a, b) -> Integer.compare(genderScore(b, gender), genderScore(a, gender)))
                 .findFirst()
                 .orElse(null);
     }
 
     private boolean matchesRange(ReferenceRange range, Integer age, String gender) {
-        if (range == null) {
+        if (range == null)
             return false;
-        }
         String rangeGender = range.getGender();
         if (gender != null && rangeGender != null && !"Both".equalsIgnoreCase(rangeGender)
-                && !rangeGender.equalsIgnoreCase(gender)) {
+                && !rangeGender.equalsIgnoreCase(gender))
             return false;
-        }
         if (age != null) {
-            if (range.getMinAge() != null && age < range.getMinAge()) {
+            if (range.getMinAge() != null && age < range.getMinAge())
                 return false;
-            }
-            if (range.getMaxAge() != null && age > range.getMaxAge()) {
+            if (range.getMaxAge() != null && age > range.getMaxAge())
                 return false;
-            }
         }
         return true;
     }
 
     private int genderScore(ReferenceRange range, String gender) {
-        if (range == null) {
+        if (range == null)
             return 0;
-        }
-        String rangeGender = range.getGender();
-        if (gender != null && rangeGender != null && rangeGender.equalsIgnoreCase(gender)) {
+        String rg = range.getGender();
+        if (gender != null && rg != null && rg.equalsIgnoreCase(gender))
             return 2;
-        }
-        if (rangeGender != null && "Both".equalsIgnoreCase(rangeGender)) {
+        if (rg != null && "Both".equalsIgnoreCase(rg))
             return 1;
-        }
         return 0;
     }
 
     @FXML
     private void handleSaveResults() {
         try {
-            // Commit any pending table edits
             resultsTable.refresh();
-
-            // Get current user for audit
-            String currentUser = SessionManager.getCurrentUser() != null
-                    ? SessionManager.getCurrentUser().getUsername()
+            String currentUser = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getUsername()
                     : "UNKNOWN";
 
-            // Check how many results are entered
-            int enteredCount = 0;
-            int totalCount = resultsTable.getItems().size();
-            for (LabResult result : resultsTable.getItems()) {
-                if (result.getResultValue() != null && !result.getResultValue().trim().isEmpty()) {
-                    enteredCount++;
-                }
-            }
+            int enteredCount = (int) resultsTable.getItems().stream()
+                    .filter(r -> r.getResultValue() != null && !r.getResultValue().trim().isEmpty()).count();
 
             if (enteredCount == 0) {
-                showError("No results to save. Please enter at least one result value.");
+                showError("No results to save.");
                 return;
             }
 
-            // Check if this is an edit of a completed order (correction scenario)
-            boolean isEditingCompletedOrder = "COMPLETED".equals(currentOrder.getStatus());
-
-            // Save all results with values
-            // If editing a completed order, just save and show success - no status change
-            // needed
-            if (isEditingCompletedOrder) {
-                String editReason = null;
+            if ("COMPLETED".equals(currentOrder.getStatus())) {
+                // ... Existing Edit Logic ...
+                String editReason = "";
                 if (currentOrder.isReportDelivered()) {
                     TextInputDialog dialog = new TextInputDialog();
                     dialog.setTitle("Edit Delivered Report");
-                    dialog.setHeaderText("Report was already delivered.");
-                    dialog.setContentText("Enter reason for edit:");
+                    dialog.setHeaderText("Reason required:");
                     editReason = dialog.showAndWait().orElse("").trim();
-                    if (editReason.isEmpty()) {
-                        showError("Edit reason is required for delivered reports.");
+                    if (editReason.isEmpty())
                         return;
-                    }
                 }
-
                 currentOrder.setResults(new ArrayList<>(resultsTable.getItems()));
-                try {
-                    resultService.saveEditedResults(currentOrder, editReason);
-                } catch (ObjectOptimisticLockingFailureException e) {
-                    showError("This order was updated by another user. Please refresh and try again.");
-                    return;
-                }
-
-                if (currentOrder.isReportDelivered()) {
-                    showSuccess("Results updated. Reprint required for Reception.");
-                } else {
-                    showSuccess("Results corrected and saved successfully!");
-                }
-
-                // Close window after a short delay
-                Timer timer = new Timer();
-                timer.schedule(new TimerTask() {
-                    @Override
-                    public void run() {
-                        Platform.runLater(() -> handleClose());
-                        timer.cancel();
-                    }
-                }, 1500);
-                return;
-            }
-
-            // Save all results with values (pending orders)
-            for (LabResult result : resultsTable.getItems()) {
-                if (result.getResultValue() != null && !result.getResultValue().trim().isEmpty()) {
-                    result.setPerformedBy(currentUser);
-                    result.setPerformedAt(LocalDateTime.now());
-                    try {
+                resultService.saveEditedResults(currentOrder, editReason);
+                showSuccess("Results corrected!");
+            } else {
+                // Pending Logic
+                for (LabResult result : resultsTable.getItems()) {
+                    if (result.getResultValue() != null && !result.getResultValue().trim().isEmpty()) {
+                        result.setPerformedBy(currentUser);
+                        result.setPerformedAt(LocalDateTime.now());
                         resultRepository.save(result);
-                    } catch (ObjectOptimisticLockingFailureException e) {
-                        showError("A result was updated by another user. Please refresh and try again.");
-                        return;
                     }
                 }
+                currentOrder.setResults(new ArrayList<>(resultsTable.getItems()));
+                resultService.saveResultsFromForm(currentOrder);
+                showSuccess("Results saved!");
             }
 
-            boolean allEntered = enteredCount == totalCount;
-            currentOrder.setResults(new ArrayList<>(resultsTable.getItems()));
-            resultService.saveResultsFromForm(currentOrder);
-
-            if (allEntered) {
-                showSuccess("Results saved and Order #" + currentOrder.getId() + " marked as COMPLETED!");
-
-                // Close window after a short delay
-                Timer timer = new Timer();
-                timer.schedule(new TimerTask() {
-                    @Override
-                    public void run() {
-                        Platform.runLater(() -> handleClose());
-                        timer.cancel();
-                    }
-                }, 1500);
-            } else {
-                showSuccess("Saved " + enteredCount + " result(s). Order remains pending.");
-                loadOrderData();
-            }
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            showError("Failed to save results: " + e.getMessage());
-        }
-    }
-
-    @FXML
-    private void handleMarkCompleted() {
-        // Validate all results are entered
-        boolean allEntered = true;
-        int enteredCount = 0;
-        for (LabResult result : resultsTable.getItems()) {
-            if (result.getResultValue() != null && !result.getResultValue().trim().isEmpty()) {
-                enteredCount++;
-            } else {
-                allEntered = false;
-            }
-        }
-
-        if (enteredCount == 0) {
-            showError("No results have been entered. Please enter at least one result before completing.");
-            return;
-        }
-
-        if (!allEntered) {
-            showError("All test results must be entered before marking this order as completed.");
-            return;
-        }
-
-        try {
-            System.out.println("[ResultEntryController] Mark completed - calling ResultService.saveResultsFromForm()");
-
-            // Use the ResultService which has proper transaction handling
-            // First, update the order with current results from the form
-            currentOrder.setResults(new ArrayList<>(resultsTable.getItems()));
-            resultService.saveResultsFromForm(currentOrder);
-
-            System.out.println("[ResultEntryController] Order completed successfully!");
-            showSuccess("Order #" + currentOrder.getId() + " marked as COMPLETED!");
-
-            // Close window after a short delay (non-blocking)
-            Timer timer = new Timer();
-            timer.schedule(new TimerTask() {
+            new Timer().schedule(new TimerTask() {
                 @Override
                 public void run() {
                     Platform.runLater(() -> handleClose());
-                    timer.cancel();
                 }
             }, 1500);
-
         } catch (Exception e) {
-            e.printStackTrace();
-            showError("Failed to complete order: " + e.getMessage());
+            showError("Save failed: " + e.getMessage());
         }
     }
 
