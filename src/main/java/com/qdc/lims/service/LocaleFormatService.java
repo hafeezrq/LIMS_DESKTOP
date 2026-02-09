@@ -23,6 +23,8 @@ import javafx.util.StringConverter;
 @Service
 public class LocaleFormatService {
 
+    private static final Locale PAKISTAN_LOCALE = Locale.forLanguageTag("en-PK");
+
     private final ConfigService configService;
     private final Locale locale;
     private final DateTimeFormatter dateFormatter;
@@ -31,7 +33,7 @@ public class LocaleFormatService {
 
     public LocaleFormatService(ConfigService configService) {
         this.configService = configService;
-        this.locale = Locale.getDefault();
+        this.locale = PAKISTAN_LOCALE;
         this.dateFormatter = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale);
         this.timeFormatter = DateTimeFormatter.ofLocalizedTime(FormatStyle.MEDIUM).withLocale(locale);
         this.dateTimeFormatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).withLocale(locale);
@@ -154,18 +156,38 @@ public class LocaleFormatService {
 
     private String resolveCurrencySymbol() {
         String configured = configService.getTrimmed("CURRENCY_SYMBOL", "");
+        String localeSymbol = getLocaleCurrencySymbol();
+        String defaultSymbol = normalizePakistanCurrencySymbol(localeSymbol);
+
         if (configured.isBlank() || configured.equalsIgnoreCase("AUTO") || configured.equalsIgnoreCase("DEFAULT")) {
-            return getLocaleCurrencySymbol();
+            return defaultSymbol;
         }
 
-        String localeSymbol = getLocaleCurrencySymbol();
         if (!localeSymbol.equals(configured)) {
             if ("$".equals(configured) && !"$".equals(localeSymbol)) {
-                return localeSymbol;
+                return defaultSymbol;
             }
         }
 
+        if (isPakistanLocale() && "Rs".equalsIgnoreCase(configured)) {
+            return "Rs.";
+        }
+
         return configured;
+    }
+
+    private String normalizePakistanCurrencySymbol(String symbol) {
+        if (!isPakistanLocale()) {
+            return symbol;
+        }
+        if (symbol == null || symbol.isBlank() || "Rs".equalsIgnoreCase(symbol) || "PKR".equalsIgnoreCase(symbol)) {
+            return "Rs.";
+        }
+        return symbol;
+    }
+
+    private boolean isPakistanLocale() {
+        return "PK".equalsIgnoreCase(locale.getCountry());
     }
 
     private String getLocaleCurrencySymbol() {

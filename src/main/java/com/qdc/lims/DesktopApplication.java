@@ -12,6 +12,7 @@ import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 
 import java.nio.file.Files;
+import java.util.Locale;
 
 /**
  * JavaFX Desktop Application entry point.
@@ -19,10 +20,16 @@ import java.nio.file.Files;
  */
 public class DesktopApplication extends Application {
 
+    private static final Locale PAKISTAN_LOCALE = Locale.forLanguageTag("en-PK");
+
     private ConfigurableApplicationContext springContext;
 
     @Override
     public void init() throws Exception {
+        // Keep app-wide formatting consistent for numbers, dates, and currency.
+        Locale.setDefault(PAKISTAN_LOCALE);
+        Locale.setDefault(Locale.Category.FORMAT, PAKISTAN_LOCALE);
+
         // Ensure app data folders exist (logs/backups).
         Files.createDirectories(AppPaths.appDataDir());
         Files.createDirectories(AppPaths.backupsDir());
