@@ -142,11 +142,11 @@ public interface LabOrderRepository extends JpaRepository<LabOrder, Long> {
     List<LabOrder> findByBalanceDueGreaterThan(BigDecimal minBalance);
 
     /**
-     * Normalizes legacy in-progress orders back to pending status.
+     * Normalizes stale in-progress locks (orders opened for review but not started).
      *
      * @return number of rows updated
      */
     @Modifying
-    @Query("UPDATE LabOrder o SET o.status = 'PENDING' WHERE o.status = 'IN_PROGRESS'")
-    int normalizeInProgressToPending();
+    @Query("UPDATE LabOrder o SET o.status = 'PENDING' WHERE o.status = 'IN_PROGRESS' AND o.labStartedAt IS NULL")
+    int normalizeStaleInProgressToPending();
 }

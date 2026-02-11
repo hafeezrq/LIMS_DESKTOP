@@ -3,16 +3,18 @@ package com.qdc.lims.ui.controller;
 import com.qdc.lims.entity.LabOrder;
 import com.qdc.lims.repository.LabOrderRepository;
 import com.qdc.lims.service.LocaleFormatService;
+import com.qdc.lims.service.OrderCancellationService;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
+import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
-import javafx.geometry.Insets;
-import javafx.scene.layout.VBox;
+import javafx.scene.input.MouseButton;
+import javafx.scene.layout.BorderPane;
 import javafx.stage.Stage;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
@@ -81,17 +83,21 @@ public class LabWorklistController {
     private final LabOrderRepository orderRepository;
     private final ApplicationContext springContext;
     private final LocaleFormatService localeFormatService;
+    private final OrderCancellationService orderCancellationService;
     private List<LabOrder> allOrders;
+    private Runnable closeAction;
 
     // Flag to show completed tests on initialization
     private boolean showCompletedOnInit = false;
 
     public LabWorklistController(LabOrderRepository orderRepository,
             ApplicationContext springContext,
-            LocaleFormatService localeFormatService) {
+            LocaleFormatService localeFormatService,
+            OrderCancellationService orderCancellationService) {
         this.orderRepository = orderRepository;
         this.springContext = springContext;
         this.localeFormatService = localeFormatService;
+        this.orderCancellationService = orderCancellationService;
     }
 
     /**
@@ -110,6 +116,15 @@ public class LabWorklistController {
         pendingRadio.setToggleGroup(filterGroup);
         completedRadio.setToggleGroup(filterGroup);
         allRadio.setToggleGroup(filterGroup);
+        ordersTable.setRowFactory(table -> {
+            TableRow<LabOrder> row = new TableRow<>();
+            row.setOnMouseClicked(event -> {
+                if (event.getButton() == MouseButton.PRIMARY && event.getClickCount() == 2 && !row.isEmpty()) {
+                    openResultEntryForm(row.getItem());
+                }
+            });
+            return row;
+        });
 
         setupTableColumns();
         loadOrders();
@@ -180,14 +195,14 @@ public class LabWorklistController {
 
         // Action buttons in table
         actionColumn.setCellFactory(param -> new TableCell<>() {
-            private final Button viewTestsBtn = new Button("View Tests");
+            private final Button viewTestsBtn = new Button("Open");
             private final Button editResultsBtn = new Button("Edit Results");
 
             {
                 viewTestsBtn.setStyle("-fx-background-color: #3498db; -fx-text-fill: white; -fx-padding: 5 10;");
                 viewTestsBtn.setOnAction(event -> {
                     LabOrder order = getTableView().getItems().get(getIndex());
-                    showTestsDialog(order, true);
+                    openResultEntryForm(order);
                 });
 
                 editResultsBtn.setStyle("-fx-background-color: #e67e22; -fx-text-fill: white; -fx-padding: 5 10;");
@@ -299,6 +314,13 @@ public class LabWorklistController {
         applyFilter();
     }
 
+    /**
+     * Optional close callback used when this screen is embedded inside a tab.
+     */
+    public void setCloseAction(Runnable closeAction) {
+        this.closeAction = closeAction;
+    }
+
     private boolean matchesSearch(LabOrder order, String searchTerm) {
         if (order.getPatient() != null) {
             if (order.getPatient().getMrn() != null
@@ -336,7 +358,17 @@ public class LabWorklistController {
     }
 
     private void openResultEntryForm(LabOrder order) {
+        if (order == null || order.getId() == null) {
+            return;
+        }
+        boolean manageLock = shouldManageCancellationLock(order);
+        boolean lockAcquired = false;
         try {
+            if (manageLock) {
+                orderCancellationService.markUnderLabReview(order.getId());
+                lockAcquired = true;
+            }
+
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/result_entry.fxml"));
             loader.setControllerFactory(springContext::getBean);
             Parent root = loader.load();
@@ -344,83 +376,59 @@ public class LabWorklistController {
             ResultEntryController controller = loader.getController();
             controller.setOrder(order);
 
+            Tab currentTab = findCurrentSessionTab();
+            if (currentTab != null) {
+                Node previousContent = currentTab.getContent();
+                String originalTitle = currentTab.getText();
+                Tooltip originalTooltip = currentTab.getTooltip();
+
+                currentTab.setText(buildResultEntryTabTitle(originalTitle, order.getId()));
+                currentTab.setTooltip(new Tooltip("Result Entry - Order #" + order.getId()));
+
+                boolean releaseLockOnClose = manageLock && lockAcquired;
+                controller.setCloseAction(() -> {
+                    if (releaseLockOnClose) {
+                        try {
+                            orderCancellationService.releaseLabReview(order.getId());
+                        } catch (Exception ignored) {
+                            // Ignore lock-release failures during close to avoid blocking UI flow.
+                        }
+                    }
+                    currentTab.setContent(previousContent);
+                    currentTab.setText(originalTitle);
+                    currentTab.setTooltip(originalTooltip);
+                    refreshWorklistData();
+                });
+
+                currentTab.setContent(root);
+                return;
+            }
+
             Stage stage = new Stage();
             stage.setTitle("Enter Results - Order #" + order.getId());
             stage.setScene(new Scene(root));
+            boolean releaseLockOnClose = manageLock && lockAcquired;
             stage.setOnHidden(e -> {
-                handleRefresh(); // Refresh when result entry closes
+                if (releaseLockOnClose) {
+                    try {
+                        orderCancellationService.releaseLabReview(order.getId());
+                    } catch (Exception ignored) {
+                        // Ignore lock-release failures during close to avoid blocking UI flow.
+                    }
+                }
+                refreshWorklistData();
             });
             stage.show();
         } catch (Exception e) {
-            e.printStackTrace();
-            showAlert("Failed to open result entry: " + e.getMessage());
-        }
-    }
-
-    private void showTestsDialog(LabOrder order, boolean allowEnterResults) {
-        if (order == null) {
-            return;
-        }
-        Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle("Order Tests");
-        dialog.setHeaderText("Order #" + order.getId() + " - " + order.getPatient().getFullName());
-
-        VBox content = new VBox(8);
-        content.setPadding(new Insets(10));
-        Label meta = new Label("MRN: " + order.getPatient().getMrn() + " | Tests: "
-                + (order.getResults() != null ? order.getResults().size() : 0));
-        meta.setStyle("-fx-text-fill: #7f8c8d;");
-        content.getChildren().add(meta);
-
-        VBox testsBox = new VBox(6);
-        if (order.getResults() != null) {
-            var grouped = order.getResults().stream()
-                    .sorted((a, b) -> {
-                        String aName = a.getTestDefinition() != null ? a.getTestDefinition().getTestName() : "";
-                        String bName = b.getTestDefinition() != null ? b.getTestDefinition().getTestName() : "";
-                        return aName.compareToIgnoreCase(bName);
-                    })
-                    .collect(Collectors.groupingBy(
-                            result -> result.getTestDefinition() != null
-                                    && result.getTestDefinition().getCategory() != null
-                                    && result.getTestDefinition().getCategory().getName() != null
-                                            ? result.getTestDefinition().getCategory().getName()
-                                            : "Other",
-                            java.util.LinkedHashMap::new,
-                            Collectors.toList()));
-
-            for (var entry : grouped.entrySet()) {
-                Label categoryLabel = new Label(entry.getKey());
-                categoryLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #34495e;");
-                testsBox.getChildren().add(categoryLabel);
-
-                for (var result : entry.getValue()) {
-                    String testName = result.getTestDefinition() != null
-                            ? result.getTestDefinition().getTestName()
-                            : "-";
-                    boolean done = result.getResultValue() != null && !result.getResultValue().trim().isEmpty();
-                    Label testLabel = new Label("- " + testName + (done ? " [DONE]" : " [PENDING]"));
-                    testsBox.getChildren().add(testLabel);
+            if (manageLock && lockAcquired) {
+                try {
+                    orderCancellationService.releaseLabReview(order.getId());
+                } catch (Exception ignored) {
+                    // Ignore secondary unlock errors while surfacing primary failure.
                 }
             }
-        }
-
-        ScrollPane scrollPane = new ScrollPane(testsBox);
-        scrollPane.setFitToWidth(true);
-        scrollPane.setPrefViewportHeight(300);
-        content.getChildren().add(scrollPane);
-
-        dialog.getDialogPane().setContent(content);
-
-        ButtonType enterBtn = new ButtonType("Enter Results", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
-        if (allowEnterResults) {
-            dialog.getDialogPane().getButtonTypes().add(enterBtn);
-        }
-
-        ButtonType response = dialog.showAndWait().orElse(ButtonType.CLOSE);
-        if (response == enterBtn) {
-            openResultEntryForm(order);
+            e.printStackTrace();
+            showAlert("Failed to open result entry: " + e.getMessage());
         }
     }
 
@@ -431,8 +439,64 @@ public class LabWorklistController {
         return "PENDING".equals(order.getStatus()) || "IN_PROGRESS".equals(order.getStatus());
     }
 
+    private boolean shouldManageCancellationLock(LabOrder order) {
+        return order != null
+                && order.getId() != null
+                && ("PENDING".equals(order.getStatus()) || "IN_PROGRESS".equals(order.getStatus()));
+    }
+
+    private void refreshWorklistData() {
+        loadOrders();
+        updateStats();
+        applyFilter();
+    }
+
+    private Tab findCurrentSessionTab() {
+        if (ordersTable == null || ordersTable.getScene() == null) {
+            return null;
+        }
+        if (!(ordersTable.getScene().getRoot() instanceof BorderPane borderPane)) {
+            return null;
+        }
+        if (!(borderPane.getCenter() instanceof TabPane tabPane)) {
+            return null;
+        }
+        for (Tab tab : tabPane.getTabs()) {
+            Node tabContent = tab.getContent();
+            if (tabContent == ordersTable || isDescendantOf(ordersTable, tabContent)) {
+                return tab;
+            }
+        }
+        return null;
+    }
+
+    private boolean isDescendantOf(Node node, Node potentialParent) {
+        if (node == null || potentialParent == null) {
+            return false;
+        }
+        javafx.scene.Parent current = node.getParent();
+        while (current != null) {
+            if (current == potentialParent) {
+                return true;
+            }
+            current = current.getParent();
+        }
+        return false;
+    }
+
+    private String buildResultEntryTabTitle(String originalTitle, Long orderId) {
+        if (originalTitle == null || originalTitle.isBlank()) {
+            return "Order #" + orderId;
+        }
+        return originalTitle + " - Order #" + orderId;
+    }
+
     @FXML
     private void handleClose() {
+        if (closeAction != null) {
+            closeAction.run();
+            return;
+        }
         Stage stage = (Stage) ordersTable.getScene().getWindow();
         stage.close();
     }

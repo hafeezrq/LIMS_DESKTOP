@@ -6,6 +6,7 @@ import com.qdc.lims.entity.Doctor;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -105,4 +106,12 @@ public interface CommissionLedgerRepository extends JpaRepository<CommissionLedg
      * @return count of records
      */
     long countByDoctorIdAndStatus(Long doctorId, String status);
+
+    /**
+     * Finds commission ledger row linked to a specific lab order.
+     *
+     * @param labOrderId order id
+     * @return matching commission ledger if present
+     */
+    Optional<CommissionLedger> findByLabOrderId(Long labOrderId);
 }

@@ -63,6 +63,7 @@ public class ResultEntryController {
     private final LocaleFormatService localeFormatService;
     private final ReferenceRangeRepository referenceRangeRepository;
     private LabOrder currentOrder;
+    private Runnable closeAction;
 
     // Flag to prevent selection listener loops during programmatic navigation
     private boolean adjustingSelection = false;
@@ -82,6 +83,13 @@ public class ResultEntryController {
     public void setOrder(LabOrder order) {
         this.currentOrder = order;
         loadOrderData();
+    }
+
+    /**
+     * Optional close callback used when embedded in a tab instead of a stage.
+     */
+    public void setCloseAction(Runnable closeAction) {
+        this.closeAction = closeAction;
     }
 
     @FXML
@@ -450,6 +458,10 @@ public class ResultEntryController {
 
     @FXML
     private void handleClose() {
+        if (closeAction != null) {
+            closeAction.run();
+            return;
+        }
         Stage stage = (Stage) resultsTable.getScene().getWindow();
         stage.close();
     }

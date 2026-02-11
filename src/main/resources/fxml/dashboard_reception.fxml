@@ -149,6 +149,7 @@
                                     <TableColumn fx:id="pendingPatientCol" text="Patient Name" prefWidth="180"/>
                                     <TableColumn fx:id="pendingDateCol" text="Order Date" prefWidth="130"/>
                                     <TableColumn fx:id="pendingStatusCol" text="Status" prefWidth="100"/>
+                                    <TableColumn fx:id="pendingActionCol" text="Action" prefWidth="120"/>
                                 </columns>
                                 <placeholder>
                                     <Label text="No pending orders" style="-fx-text-fill: #7f8c8d;"/>

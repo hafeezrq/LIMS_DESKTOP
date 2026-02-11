@@ -13,13 +13,17 @@ import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
+import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.layout.BorderPane;
 import javafx.scene.control.*;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
+
+import java.time.LocalDate;
 
 /**
  * JavaFX controller for the lab technician dashboard window.
@@ -133,9 +137,8 @@ public class LabDashboardController {
             // Run database query in background thread to avoid UI freeze
             new Thread(() -> {
                 try {
-                    // Pending = anything NOT completed and NOT cancelled (same logic as Reception)
-                    long newPendingCount = labOrderRepository.countByStatusNotAndStatusNot("COMPLETED", "CANCELLED");
-                    long newCompletedCount = labOrderRepository.countByStatus("COMPLETED");
+                    long newPendingCount = labOrderRepository.countPendingWithResults();
+                    long newCompletedCount = countCompletedTodayWithResults();
 
                     // Update UI on JavaFX thread
                     Platform.runLater(() -> {
@@ -175,7 +178,7 @@ public class LabDashboardController {
         try {
             // Pending = anything NOT completed and NOT cancelled (same logic as Reception)
             long pendingCount = labOrderRepository.countPendingWithResults();
-            long completedCount = labOrderRepository.countCompletedWithResults();
+            long completedCount = countCompletedTodayWithResults();
 
             pendingCountLabel.setText(String.valueOf(pendingCount));
             completedCountLabel.setText(String.valueOf(completedCount));
@@ -271,60 +274,106 @@ public class LabDashboardController {
 
     @FXML
     private void handleWorklist() {
-        try {
-            FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/lab_worklist.fxml"));
-            loader.setControllerFactory(springContext::getBean);
-            Parent root = loader.load();
-
-            LabWorklistController controller = loader.getController();
-            controller.showPending();
-
-            Stage stage = createBrandedStage("Lab Worklist");
-            stage.setScene(new Scene(root));
-            stage.show();
-        } catch (Exception e) {
-            e.printStackTrace();
-            showAlert("Error", "Failed to open lab worklist: " + e.getMessage());
-        }
+        openWorklistInCurrentTab(false);
     }
 
     @FXML
     private void handleEnterResults() {
+        openWorklistInCurrentTab(false);
+    }
+
+    @FXML
+    private void handleCompletedTests() {
+        openWorklistInCurrentTab(true);
+    }
+
+    private void openWorklistInCurrentTab(boolean showCompleted) {
         try {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/lab_worklist.fxml"));
             loader.setControllerFactory(springContext::getBean);
-            Parent root = loader.load();
+            Parent worklistRoot = loader.load();
 
             LabWorklistController controller = loader.getController();
-            controller.showPending();
+            Tab currentTab = findCurrentSessionTab();
+            if (currentTab != null) {
+                Node previousContent = currentTab.getContent();
+                String originalTitle = currentTab.getText();
+                Tooltip originalTooltip = currentTab.getTooltip();
+                currentTab.setText(buildWorklistTabTitle(originalTitle, showCompleted));
+                currentTab.setTooltip(new Tooltip(showCompleted ? "Lab Completed Tests" : "Lab Pending Worklist"));
+                controller.setCloseAction(() -> {
+                    currentTab.setContent(previousContent);
+                    currentTab.setText(originalTitle);
+                    currentTab.setTooltip(originalTooltip);
+                    loadDashboardStats();
+                });
+                currentTab.setContent(worklistRoot);
+            } else {
+                Stage stage = createBrandedStage(showCompleted ? "Lab Worklist - Completed Tests" : "Lab Worklist");
+                stage.setScene(new Scene(worklistRoot));
+                stage.show();
+            }
 
-            Stage stage = createBrandedStage("Lab Worklist - Enter Results");
-            stage.setScene(new Scene(root));
-            stage.show();
+            if (showCompleted) {
+                controller.showCompleted();
+            } else {
+                controller.showPending();
+            }
         } catch (Exception e) {
             e.printStackTrace();
             showAlert("Error", "Failed to open lab worklist: " + e.getMessage());
         }
     }
 
-    @FXML
-    private void handleCompletedTests() {
-        try {
-            FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/lab_worklist.fxml"));
-            loader.setControllerFactory(springContext::getBean);
-            Parent root = loader.load();
+    private long countCompletedTodayWithResults() {
+        LocalDate today = LocalDate.now();
+        return labOrderRepository.findByStatusAndOrderDateBetween(
+                "COMPLETED",
+                today.atStartOfDay(),
+                today.atTime(23, 59, 59)).stream()
+                .filter(order -> order.getResults() != null && !order.getResults().isEmpty())
+                .count();
+    }
 
-            // Get controller and set it to show completed tests
-            LabWorklistController controller = loader.getController();
-            controller.showCompleted();
-
-            Stage stage = createBrandedStage("Lab Worklist - Completed Tests");
-            stage.setScene(new Scene(root));
-            stage.show();
-        } catch (Exception e) {
-            e.printStackTrace();
-            showAlert("Error", "Failed to open completed tests: " + e.getMessage());
+    private Tab findCurrentSessionTab() {
+        if (welcomeLabel == null || welcomeLabel.getScene() == null) {
+            return null;
         }
+        if (!(welcomeLabel.getScene().getRoot() instanceof BorderPane borderPane)) {
+            return null;
+        }
+        if (!(borderPane.getCenter() instanceof TabPane tabPane)) {
+            return null;
+        }
+        for (Tab tab : tabPane.getTabs()) {
+            Node tabContent = tab.getContent();
+            if (tabContent == welcomeLabel || isDescendantOf(welcomeLabel, tabContent)) {
+                return tab;
+            }
+        }
+        return null;
+    }
+
+    private boolean isDescendantOf(Node node, Node potentialParent) {
+        if (node == null || potentialParent == null) {
+            return false;
+        }
+        javafx.scene.Parent current = node.getParent();
+        while (current != null) {
+            if (current == potentialParent) {
+                return true;
+            }
+            current = current.getParent();
+        }
+        return false;
+    }
+
+    private String buildWorklistTabTitle(String originalTitle, boolean showCompleted) {
+        String suffix = showCompleted ? "Completed Tests" : "Worklist";
+        if (originalTitle == null || originalTitle.isBlank()) {
+            return suffix;
+        }
+        return originalTitle + " - " + suffix;
     }
 
     @FXML

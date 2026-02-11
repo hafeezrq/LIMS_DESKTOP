@@ -3,7 +3,9 @@ package com.qdc.lims.entity;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+import org.hibernate.Hibernate;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -14,7 +16,8 @@ import java.util.List;
  * and result details.
  */
 @Entity
-@Data
+@Getter
+@Setter
 public class LabOrder {
 
     @Id
@@ -68,6 +71,7 @@ public class LabOrder {
     private BigDecimal paidAmount = BigDecimal.ZERO; // e.g. 500 (Patient paid half)
     @Column(precision = 19, scale = 4)
     private BigDecimal balanceDue = BigDecimal.ZERO; // e.g. 400 (Remaining)
+    private LocalDateTime labStartedAt;
 
     // One Order = Many Tests (Results)
     // "CascadeType.ALL" means if we save the Order, it auto-saves the Result rows
@@ -119,6 +123,26 @@ public class LabOrder {
         return results.stream()
                 .filter(r -> "PENDING".equalsIgnoreCase(r.getStatus()))
                 .count();
+    }
+
+    @Override
+    public final boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null) {
+            return false;
+        }
+        if (Hibernate.getClass(this) != Hibernate.getClass(o)) {
+            return false;
+        }
+        LabOrder other = (LabOrder) o;
+        return id != null && id.equals(other.id);
+    }
+
+    @Override
+    public final int hashCode() {
+        return getClass().hashCode();
     }
 
 }

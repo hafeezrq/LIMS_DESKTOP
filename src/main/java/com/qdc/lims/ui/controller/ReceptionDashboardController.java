@@ -16,6 +16,7 @@ import com.qdc.lims.repository.LabOrderRepository;
 import com.qdc.lims.repository.PanelRepository;
 import com.qdc.lims.repository.ReferenceRangeRepository;
 import com.qdc.lims.service.LocaleFormatService;
+import com.qdc.lims.service.OrderCancellationService;
 import javafx.animation.Animation;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
@@ -51,6 +52,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -72,9 +74,13 @@ public class ReceptionDashboardController {
     private final DashboardSwitchService dashboardSwitchService;
     private final BrandingService brandingService;
     private final LocaleFormatService localeFormatService;
+    private final OrderCancellationService orderCancellationService;
 
     // Auto-refresh timer for real-time count updates
     private Timeline autoRefreshTimeline;
+    private long lastReadyCount = -1;
+    private long lastPendingCount = -1;
+    private long lastInProgressCount = -1;
 
     // FXML Components
     @FXML
@@ -144,6 +150,8 @@ public class ReceptionDashboardController {
     @FXML
     private TableColumn<LabOrder, String> pendingStatusCol;
     @FXML
+    private TableColumn<LabOrder, Void> pendingActionCol;
+    @FXML
     private TableView<LabOrder> deliveredOrdersTable;
     @FXML
     private TableColumn<LabOrder, String> deliveredOrderIdCol;
@@ -169,7 +177,8 @@ public class ReceptionDashboardController {
             ReferenceRangeRepository referenceRangeRepository,
             DashboardSwitchService dashboardSwitchService,
             BrandingService brandingService,
-            LocaleFormatService localeFormatService) {
+            LocaleFormatService localeFormatService,
+            OrderCancellationService orderCancellationService) {
         this.applicationContext = applicationContext;
         this.labOrderRepository = labOrderRepository;
         this.panelRepository = panelRepository;
@@ -177,6 +186,7 @@ public class ReceptionDashboardController {
         this.dashboardSwitchService = dashboardSwitchService;
         this.brandingService = brandingService;
         this.localeFormatService = localeFormatService;
+        this.orderCancellationService = orderCancellationService;
     }
 
     @FXML
@@ -230,12 +240,16 @@ public class ReceptionDashboardController {
      * Starts automatic refresh of order counts every 10 seconds.
      */
     private void startAutoRefresh() {
-        autoRefreshTimeline = new Timeline(new KeyFrame(Duration.seconds(10), event -> {
+        autoRefreshTimeline = new Timeline(new KeyFrame(Duration.seconds(3), event -> {
             new Thread(() -> {
                 try {
                     LocalDateTime startDate = LocalDateTime.now().minusDays(30);
                     LocalDateTime endDate = LocalDateTime.now().plusDays(1);
                     List<LabOrder> allOrders = labOrderRepository.findByOrderDateBetween(startDate, endDate);
+
+                    allOrders = allOrders.stream()
+                            .filter(o -> o.getResults() != null && !o.getResults().isEmpty())
+                            .collect(Collectors.toList());
 
                     long newReadyCount = allOrders.stream()
                             .filter(o -> "COMPLETED".equals(o.getStatus()) && !o.isReportDelivered())
@@ -245,15 +259,18 @@ public class ReceptionDashboardController {
                             .filter(o -> !"COMPLETED".equals(o.getStatus()) && !"CANCELLED".equals(o.getStatus()))
                             .count();
 
-                    Platform.runLater(() -> {
-                        String currentReadyCount = readyCountLabel.getText();
-                        String currentPendingCount = pendingCountLabel.getText();
+                    long newInProgressCount = allOrders.stream()
+                            .filter(o -> "IN_PROGRESS".equals(o.getStatus()))
+                            .count();
 
-                        if (!String.valueOf(newReadyCount).equals(currentReadyCount) ||
-                                !String.valueOf(newPendingCount).equals(currentPendingCount)) {
-                            readyCountLabel.setText(String.valueOf(newReadyCount));
-                            pendingCountLabel.setText(String.valueOf(newPendingCount));
+                    Platform.runLater(() -> {
+                        if (newReadyCount != lastReadyCount
+                                || newPendingCount != lastPendingCount
+                                || newInProgressCount != lastInProgressCount) {
                             loadOrders();
+                            lastReadyCount = newReadyCount;
+                            lastPendingCount = newPendingCount;
+                            lastInProgressCount = newInProgressCount;
                         }
                     });
                 } catch (Exception e) {
@@ -371,6 +388,46 @@ public class ReceptionDashboardController {
                     dt != null ? localeFormatService.formatDateTime(dt) : "-");
         });
         pendingStatusCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().getStatus()));
+
+        if (pendingActionCol != null) {
+            pendingActionCol.setCellFactory(col -> new TableCell<LabOrder, Void>() {
+                private final Button cancelBtn = new Button("Cancel");
+
+                {
+                    cancelBtn.setStyle(
+                            "-fx-background-color: #c0392b; -fx-text-fill: white; -fx-font-size: 11; -fx-padding: 3 10;");
+                    cancelBtn.setOnAction(e -> {
+                        LabOrder order = getTableView().getItems().get(getIndex());
+                        handleCancelOrder(order);
+                    });
+                }
+
+                @Override
+                protected void updateItem(Void item, boolean empty) {
+                    super.updateItem(item, empty);
+                    if (empty || getIndex() < 0 || getIndex() >= getTableView().getItems().size()) {
+                        setGraphic(null);
+                        return;
+                    }
+
+                    LabOrder order = getTableView().getItems().get(getIndex());
+                    if (order == null) {
+                        setGraphic(null);
+                        return;
+                    }
+
+                    boolean canCancel = orderCancellationService.canCancel(order);
+                    cancelBtn.setDisable(!canCancel);
+                    if (canCancel) {
+                        cancelBtn.setTooltip(new Tooltip("Cancel order and process refund if paid."));
+                    } else {
+                        cancelBtn.setTooltip(new Tooltip("Cancellation disabled: lab work already in progress."));
+                    }
+                    setGraphic(cancelBtn);
+                }
+            });
+        }
+
         pendingOrdersTable.setItems(pendingOrders);
     }
 
@@ -469,6 +526,9 @@ public class ReceptionDashboardController {
 
             readyCountLabel.setText(String.valueOf(ready.size()));
             pendingCountLabel.setText(String.valueOf(pending.size()));
+            lastReadyCount = ready.size();
+            lastPendingCount = pending.size();
+            lastInProgressCount = pending.stream().filter(o -> "IN_PROGRESS".equals(o.getStatus())).count();
             statusLabel
                     .setText("Last refreshed: " + localeFormatService.formatTime(LocalDateTime.now().toLocalTime()));
 
@@ -476,6 +536,57 @@ public class ReceptionDashboardController {
             showError("Failed to load orders: " + e.getMessage());
             e.printStackTrace();
         }
+    }
+
+    private void handleCancelOrder(LabOrder order) {
+        if (order == null) {
+            return;
+        }
+
+        if (!orderCancellationService.canCancel(order.getId())) {
+            showError("Order #" + order.getId() + " cannot be cancelled because lab work has already started.");
+            loadOrders();
+            return;
+        }
+
+        BigDecimal refundAmount = order.getPaidAmount() != null ? order.getPaidAmount() : BigDecimal.ZERO;
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        confirm.setTitle("Cancel Order");
+        confirm.setHeaderText("Cancel Order #" + order.getId() + "?");
+        confirm.setContentText(buildCancellationConfirmationText(order.getId(), refundAmount));
+
+        Optional<ButtonType> response = confirm.showAndWait();
+        if (response.isEmpty() || response.get() != ButtonType.OK) {
+            return;
+        }
+
+        try {
+            OrderCancellationService.CancellationResult result = orderCancellationService.cancelOrder(order.getId());
+            String message = "Order #" + result.orderId() + " cancelled and deleted successfully.";
+            if (result.refundAmount() != null && result.refundAmount().compareTo(BigDecimal.ZERO) > 0) {
+                message += "\nRefund recorded: " + localeFormatService.formatCurrency(result.refundAmount());
+            } else {
+                message += "\nNo refund was required.";
+            }
+            showAlert("Order Cancelled", message);
+            loadOrders();
+        } catch (IllegalStateException ex) {
+            showError(ex.getMessage());
+            loadOrders();
+        } catch (Exception ex) {
+            showError("Failed to cancel order: " + ex.getMessage());
+        }
+    }
+
+    private String buildCancellationConfirmationText(Long orderId, BigDecimal refundAmount) {
+        StringBuilder text = new StringBuilder();
+        text.append("This will permanently delete order #").append(orderId).append(".\n");
+        text.append("Use this only when lab has not started work.");
+        if (refundAmount != null && refundAmount.compareTo(BigDecimal.ZERO) > 0) {
+            text.append("\n\nA refund expense will be recorded: ")
+                    .append(localeFormatService.formatCurrency(refundAmount));
+        }
+        return text.toString();
     }
 
     @FXML

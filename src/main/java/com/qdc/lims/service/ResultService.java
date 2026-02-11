@@ -174,10 +174,18 @@ public class ResultService {
         LabOrder dbOrder = orderRepo.findById(orderForm.getId()).orElseThrow();
 
         boolean allTestsDone = dbOrder.getResults().stream()
-                .allMatch(r -> r.getResultValue() != null && !r.getResultValue().trim().isEmpty());
+                .allMatch(this::hasEnteredResult);
+        boolean anyTestStarted = dbOrder.getResults().stream()
+                .anyMatch(this::hasStartedActivity);
+
+        if (anyTestStarted && dbOrder.getLabStartedAt() == null) {
+            dbOrder.setLabStartedAt(LocalDateTime.now());
+        }
 
         if (allTestsDone) {
             dbOrder.setStatus("COMPLETED");
+        } else if (anyTestStarted || dbOrder.getLabStartedAt() != null) {
+            dbOrder.setStatus("IN_PROGRESS");
         } else {
             dbOrder.setStatus("PENDING");
         }
@@ -294,6 +302,16 @@ public class ResultService {
 
     private String normalize(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private boolean hasEnteredResult(LabResult result) {
+        return result != null && result.getResultValue() != null && !result.getResultValue().trim().isEmpty();
+    }
+
+    private boolean hasStartedActivity(LabResult result) {
+        return hasEnteredResult(result)
+                || (result != null && result.getPerformedAt() != null)
+                || (result != null && result.getPerformedBy() != null && !result.getPerformedBy().trim().isEmpty());
     }
 
     private ReferenceRange findMatchingRange(TestDefinition test, com.qdc.lims.entity.Patient patient) {
