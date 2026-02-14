@@ -24,10 +24,14 @@ import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.image.PixelReader;
+import javafx.scene.image.PixelWriter;
+import javafx.scene.image.WritableImage;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseEvent;
+import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import javafx.stage.Modality;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,6 +40,7 @@ import org.springframework.stereotype.Controller;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -221,12 +226,12 @@ public class MainWindowController {
                 showWelcomeLogoFallback();
                 return;
             }
-            Image logo = new Image(logoUrl.toExternalForm(), true);
+            Image logo = new Image(logoUrl.toExternalForm(), 512, 512, true, true, false);
             if (logo.isError()) {
                 showWelcomeLogoFallback();
                 return;
             }
-            welcomeLogoImage.setImage(logo);
+            welcomeLogoImage.setImage(removeBackgroundForWelcomeLogo(logo));
             if (welcomeLogoEmoji != null) {
                 welcomeLogoEmoji.setVisible(false);
                 welcomeLogoEmoji.setManaged(false);
@@ -234,6 +239,120 @@ public class MainWindowController {
         } catch (Exception ignored) {
             showWelcomeLogoFallback();
         }
+    }
+
+    private Image removeBackgroundForWelcomeLogo(Image logo) {
+        PixelReader reader = logo.getPixelReader();
+        if (reader == null) {
+            return logo;
+        }
+
+        int width = Math.max(1, (int) Math.round(logo.getWidth()));
+        int height = Math.max(1, (int) Math.round(logo.getHeight()));
+        if (width < 4 || height < 4) {
+            return logo;
+        }
+
+        Color backgroundColor = averageCornerColor(reader, width, height);
+        boolean[] backgroundMask = new boolean[width * height];
+        ArrayDeque<Integer> queue = new ArrayDeque<>();
+
+        seedBackgroundQueue(reader, width, height, backgroundColor, backgroundMask, queue);
+
+        while (!queue.isEmpty()) {
+            int index = queue.removeFirst();
+            int x = index % width;
+            int y = index / width;
+
+            enqueueIfBackground(reader, width, height, x - 1, y, backgroundColor, backgroundMask, queue);
+            enqueueIfBackground(reader, width, height, x + 1, y, backgroundColor, backgroundMask, queue);
+            enqueueIfBackground(reader, width, height, x, y - 1, backgroundColor, backgroundMask, queue);
+            enqueueIfBackground(reader, width, height, x, y + 1, backgroundColor, backgroundMask, queue);
+        }
+
+        WritableImage output = new WritableImage(width, height);
+        PixelWriter writer = output.getPixelWriter();
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int index = y * width + x;
+                Color pixel = reader.getColor(x, y);
+                if (backgroundMask[index]) {
+                    writer.setColor(x, y, Color.color(pixel.getRed(), pixel.getGreen(), pixel.getBlue(), 0.0));
+                } else {
+                    writer.setColor(x, y, pixel);
+                }
+            }
+        }
+
+        return output;
+    }
+
+    private void seedBackgroundQueue(
+            PixelReader reader,
+            int width,
+            int height,
+            Color backgroundColor,
+            boolean[] backgroundMask,
+            ArrayDeque<Integer> queue
+    ) {
+        for (int x = 0; x < width; x++) {
+            enqueueIfBackground(reader, width, height, x, 0, backgroundColor, backgroundMask, queue);
+            enqueueIfBackground(reader, width, height, x, height - 1, backgroundColor, backgroundMask, queue);
+        }
+        for (int y = 0; y < height; y++) {
+            enqueueIfBackground(reader, width, height, 0, y, backgroundColor, backgroundMask, queue);
+            enqueueIfBackground(reader, width, height, width - 1, y, backgroundColor, backgroundMask, queue);
+        }
+    }
+
+    private void enqueueIfBackground(
+            PixelReader reader,
+            int width,
+            int height,
+            int x,
+            int y,
+            Color backgroundColor,
+            boolean[] backgroundMask,
+            ArrayDeque<Integer> queue
+    ) {
+        if (x < 0 || y < 0 || x >= width || y >= height) {
+            return;
+        }
+        int index = y * width + x;
+        if (backgroundMask[index]) {
+            return;
+        }
+        Color pixel = reader.getColor(x, y);
+        if (!isBackgroundColor(pixel, backgroundColor)) {
+            return;
+        }
+        backgroundMask[index] = true;
+        queue.addLast(index);
+    }
+
+    private boolean isBackgroundColor(Color pixel, Color backgroundColor) {
+        if (pixel.getOpacity() < 0.02) {
+            return true;
+        }
+        double dr = pixel.getRed() - backgroundColor.getRed();
+        double dg = pixel.getGreen() - backgroundColor.getGreen();
+        double db = pixel.getBlue() - backgroundColor.getBlue();
+        double distance = Math.sqrt((dr * dr) + (dg * dg) + (db * db));
+        return distance <= 0.18;
+    }
+
+    private Color averageCornerColor(PixelReader reader, int width, int height) {
+        int maxX = width - 1;
+        int maxY = height - 1;
+        Color c1 = reader.getColor(0, 0);
+        Color c2 = reader.getColor(maxX, 0);
+        Color c3 = reader.getColor(0, maxY);
+        Color c4 = reader.getColor(maxX, maxY);
+        return Color.color(
+                (c1.getRed() + c2.getRed() + c3.getRed() + c4.getRed()) / 4.0,
+                (c1.getGreen() + c2.getGreen() + c3.getGreen() + c4.getGreen()) / 4.0,
+                (c1.getBlue() + c2.getBlue() + c3.getBlue() + c4.getBlue()) / 4.0
+        );
     }
 
     private void showWelcomeLogoFallback() {

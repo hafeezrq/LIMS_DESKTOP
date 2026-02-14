@@ -274,6 +274,8 @@
 						<module>jdk.unsupported</module>
 					</addModules>
 						<options>
+							<option>--resource-dir</option>
+							<option>${project.basedir}/src/main/jpackage/windows</option>
 							<option>--icon</option>
 							<option>${project.basedir}/src/main/resources/icons/microscope.ico</option>
 							<option>--strip-debug</option>
