@@ -12,6 +12,7 @@ import com.qdc.lims.service.UpdateService;
 import com.qdc.lims.entity.User;
 
 import javafx.application.Platform;
+import javafx.animation.PauseTransition;
 import javafx.concurrent.Task;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -31,6 +32,7 @@ import javafx.scene.control.PasswordField;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import javafx.stage.Modality;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Controller;
 
@@ -76,6 +78,7 @@ public class AdminDashboardController {
     private TabPane adminTabs;
 
     private static final String TAB_FXML_PATH_KEY = "adminTabFxmlPath";
+    private boolean updateCheckInProgress = false;
 
     public AdminDashboardController(ApplicationContext applicationContext,
             DashboardNavigator navigator,
@@ -456,34 +459,97 @@ public class AdminDashboardController {
 
     @FXML
     private void handleCheckForUpdates() {
+        if (updateCheckInProgress) {
+            showAlert("Update Check", "Update check is already in progress.");
+            return;
+        }
+        updateCheckInProgress = true;
+
         Alert progress = new Alert(Alert.AlertType.INFORMATION);
         progress.setTitle("Checking for Updates");
         progress.setHeaderText(null);
+        progress.initModality(Modality.NONE);
         ProgressIndicator indicator = new ProgressIndicator();
         VBox content = new VBox(10, new Label("Checking for updates..."), indicator);
         progress.getDialogPane().setContent(content);
-        progress.getDialogPane().getButtonTypes().clear();
-        progress.show();
+        ButtonType cancelType = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
+        progress.getDialogPane().getButtonTypes().setAll(cancelType);
 
         Task<UpdateService.UpdateCheckResult> task = new Task<>() {
             @Override
-            protected UpdateService.UpdateCheckResult call() throws Exception {
+            protected UpdateService.UpdateCheckResult call() {
                 return updateService.checkForUpdates();
             }
         };
 
-        task.setOnSucceeded(event -> {
+        Thread[] workerRef = new Thread[1];
+        boolean[] finalized = { false };
+        PauseTransition timeoutGuard = new PauseTransition(javafx.util.Duration.seconds(30));
+        Runnable finalizeDialog = () -> {
+            if (finalized[0]) {
+                return;
+            }
+            finalized[0] = true;
+            updateCheckInProgress = false;
+            timeoutGuard.stop();
             progress.close();
-            showUpdateResult(task.getValue());
+        };
+
+        progress.setOnCloseRequest(evt -> {
+            if (!task.isDone()) {
+                task.cancel(true);
+                if (workerRef[0] != null) {
+                    workerRef[0].interrupt();
+                }
+            }
+            finalizeDialog.run();
+        });
+
+        timeoutGuard.setOnFinished(evt -> {
+            if (task.isDone() || finalized[0]) {
+                return;
+            }
+            task.cancel(true);
+            if (workerRef[0] != null) {
+                workerRef[0].interrupt();
+            }
+            finalizeDialog.run();
+            showAlert("Update Check", "Update check timed out. Please try again.");
+        });
+
+        progress.show();
+        timeoutGuard.playFromStart();
+
+        task.setOnSucceeded(event -> {
+            if (finalized[0]) {
+                return;
+            }
+            UpdateService.UpdateCheckResult result = task.getValue();
+            finalizeDialog.run();
+            showUpdateResult(result);
         });
 
         task.setOnFailed(event -> {
-            progress.close();
+            if (finalized[0]) {
+                return;
+            }
             Throwable ex = task.getException();
+            finalizeDialog.run();
             showAlert("Update Check Failed", ex != null ? ex.getMessage() : "Unable to check for updates.");
         });
 
+        task.setOnCancelled(event -> {
+            if (finalized[0]) {
+                return;
+            }
+            finalizeDialog.run();
+            if (statusLabel != null) {
+                statusLabel.setText("Update check canceled.");
+            }
+        });
+
         Thread thread = new Thread(task, "update-check");
+        workerRef[0] = thread;
         thread.setDaemon(true);
         thread.start();
     }
@@ -530,6 +596,10 @@ public class AdminDashboardController {
         Optional<ButtonType> choice = alert.showAndWait();
         if (choice.isPresent() && choice.get() == download) {
             startInstallerDownload(result);
+            return;
+        }
+        if (statusLabel != null) {
+            statusLabel.setText("Update postponed.");
         }
     }
 
@@ -546,6 +616,7 @@ public class AdminDashboardController {
         Alert progress = new Alert(Alert.AlertType.INFORMATION);
         progress.setTitle("Downloading Update");
         progress.setHeaderText(null);
+        progress.initModality(Modality.NONE);
         ProgressIndicator indicator = new ProgressIndicator();
         VBox content = new VBox(10, new Label("Downloading installer..."), indicator);
         progress.getDialogPane().setContent(content);
@@ -560,7 +631,7 @@ public class AdminDashboardController {
         };
 
         downloadTask.setOnSucceeded(event -> {
-            progress.close();
+            progress.hide();
             java.nio.file.Path installer = downloadTask.getValue();
             if (installer == null) {
                 showAlert("Update Failed", "Installer download failed.");
@@ -582,7 +653,7 @@ public class AdminDashboardController {
         });
 
         downloadTask.setOnFailed(event -> {
-            progress.close();
+            progress.hide();
             Throwable ex = downloadTask.getException();
             showAlert("Update Failed", ex != null ? ex.getMessage() : "Installer download failed.");
         });

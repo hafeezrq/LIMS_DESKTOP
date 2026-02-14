@@ -7,7 +7,6 @@ import com.qdc.lims.ui.backup.SnapshotWindowService;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
-import javafx.stage.Stage;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
@@ -162,8 +161,7 @@ public class BackupSettingsController {
 
     @FXML
     private void handleClose() {
-        Stage stage = (Stage) statusLabel.getScene().getWindow();
-        stage.close();
+        com.qdc.lims.ui.util.ViewCloseUtil.closeCurrentTabOrWindow(statusLabel);
     }
 
     private void showError(String msg) {

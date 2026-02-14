@@ -17,7 +17,6 @@ import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.scene.chart.PieChart;
 import javafx.scene.control.*;
-import javafx.stage.Stage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -252,7 +251,7 @@ public class FinancialQueriesController {
      */
     @FXML
     private void handleClose() {
-        ((Stage) closeButton.getScene().getWindow()).close();
+        com.qdc.lims.ui.util.ViewCloseUtil.closeCurrentTabOrWindow(closeButton);
     }
 
     /**

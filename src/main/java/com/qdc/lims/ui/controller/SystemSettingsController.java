@@ -148,7 +148,6 @@ public class SystemSettingsController {
      */
     @FXML
     private void handleClose() {
-        Stage stage = (Stage) clinicNameField.getScene().getWindow();
-        stage.close();
+        com.qdc.lims.ui.util.ViewCloseUtil.closeCurrentTabOrWindow(clinicNameField);
     }
 }

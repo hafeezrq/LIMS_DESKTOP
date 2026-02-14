@@ -12,7 +12,6 @@ import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
-import javafx.stage.Stage;
 import org.springframework.stereotype.Component;
 
 import java.util.HashSet;
@@ -309,8 +308,7 @@ public class UserManagementController {
 
     @FXML
     private void handleClose() {
-        Stage stage = (Stage) userTable.getScene().getWindow();
-        stage.close();
+        com.qdc.lims.ui.util.ViewCloseUtil.closeCurrentTabOrWindow(userTable);
     }
 
     private void showError(String message) {
@@ -344,8 +342,7 @@ public class UserManagementController {
 
         // Close the window
         if (userTable != null && userTable.getScene() != null && userTable.getScene().getWindow() != null) {
-            Stage stage = (Stage) userTable.getScene().getWindow();
-            stage.close();
+            com.qdc.lims.ui.util.ViewCloseUtil.closeCurrentTabOrWindow(userTable);
         }
     }
 }

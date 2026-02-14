@@ -10,7 +10,6 @@ import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
-import javafx.stage.Stage;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -384,8 +383,7 @@ public class DoctorPanelController {
      */
     @FXML
     private void handleClose() {
-        Stage stage = (Stage) doctorTable.getScene().getWindow();
-        stage.close();
+        com.qdc.lims.ui.util.ViewCloseUtil.closeCurrentTabOrWindow(doctorTable);
     }
 
     /**

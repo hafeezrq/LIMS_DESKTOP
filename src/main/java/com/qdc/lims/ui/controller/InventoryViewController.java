@@ -345,7 +345,6 @@ public class InventoryViewController {
 
     @FXML
     private void handleClose() {
-        Stage stage = (Stage) inventoryTable.getScene().getWindow();
-        stage.close();
+        com.qdc.lims.ui.util.ViewCloseUtil.closeCurrentTabOrWindow(inventoryTable);
     }
 }

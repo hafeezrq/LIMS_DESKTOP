@@ -11,7 +11,6 @@ import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
-import javafx.stage.Stage;
 import javafx.util.StringConverter;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
@@ -221,8 +220,7 @@ public class TestRecipeController {
      */
     @FXML
     private void handleClose() {
-        Stage stage = (Stage) recipeTable.getScene().getWindow();
-        stage.close();
+        com.qdc.lims.ui.util.ViewCloseUtil.closeCurrentTabOrWindow(recipeTable);
     }
 
     private void showAlert(String title, String content) {

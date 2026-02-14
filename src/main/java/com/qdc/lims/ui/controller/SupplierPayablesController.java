@@ -8,7 +8,6 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
-import javafx.stage.Stage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -173,7 +172,7 @@ public class SupplierPayablesController {
      */
     @FXML
     private void handleClose() {
-        ((Stage) closeButton.getScene().getWindow()).close();
+        com.qdc.lims.ui.util.ViewCloseUtil.closeCurrentTabOrWindow(closeButton);
     }
 
     private String formatAmount(BigDecimal amount) {

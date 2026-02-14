@@ -10,17 +10,11 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
-import javafx.scene.control.Tab;
-import javafx.scene.control.TabPane;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
-import javafx.scene.Node;
-import javafx.scene.Parent;
-import javafx.stage.Stage;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
@@ -142,76 +136,7 @@ public class ResultEditAuditController {
 
     @FXML
     private void handleClose() {
-        if (closeContainingTab(closeButton)) {
-            return;
-        }
-        Stage stage = (Stage) closeButton.getScene().getWindow();
-        stage.close();
-    }
-
-    private boolean closeContainingTab(Node contentNode) {
-        if (contentNode == null || contentNode.getScene() == null || contentNode.getScene().getRoot() == null) {
-            return false;
-        }
-
-        List<TabPane> tabPanes = new ArrayList<>();
-        collectTabPanes(contentNode.getScene().getRoot(), tabPanes);
-
-        TabPane bestPane = null;
-        Tab bestTab = null;
-        int bestDistance = Integer.MAX_VALUE;
-
-        for (TabPane tabPane : tabPanes) {
-            for (Tab tab : tabPane.getTabs()) {
-                Node tabContent = tab.getContent();
-                int distance = ancestorDistance(contentNode, tabContent);
-                if (distance >= 0 && distance < bestDistance) {
-                    bestDistance = distance;
-                    bestPane = tabPane;
-                    bestTab = tab;
-                }
-            }
-        }
-
-        if (bestPane != null && bestTab != null) {
-            bestPane.getTabs().remove(bestTab);
-            return true;
-        }
-        return false;
-    }
-
-    private void collectTabPanes(Node node, List<TabPane> result) {
-        if (node == null) {
-            return;
-        }
-        if (node instanceof TabPane pane) {
-            result.add(pane);
-        }
-        if (node instanceof Parent parent) {
-            for (Node child : parent.getChildrenUnmodifiable()) {
-                collectTabPanes(child, result);
-            }
-        }
-    }
-
-    private int ancestorDistance(Node node, Node potentialAncestor) {
-        if (node == null || potentialAncestor == null) {
-            return -1;
-        }
-        if (node == potentialAncestor) {
-            return 0;
-        }
-
-        int distance = 1;
-        Parent current = node.getParent();
-        while (current != null) {
-            if (current == potentialAncestor) {
-                return distance;
-            }
-            current = current.getParent();
-            distance++;
-        }
-        return -1;
+        com.qdc.lims.ui.util.ViewCloseUtil.closeCurrentTabOrWindow(closeButton);
     }
 
     private void resetFilters() {

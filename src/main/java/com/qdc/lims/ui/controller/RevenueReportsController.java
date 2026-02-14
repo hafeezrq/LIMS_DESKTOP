@@ -267,7 +267,6 @@ public class RevenueReportsController {
 
     @FXML
     private void handleClose(ActionEvent event) {
-        Stage stage = (Stage) closeButton.getScene().getWindow();
-        stage.close();
+        com.qdc.lims.ui.util.ViewCloseUtil.closeCurrentTabOrWindow(closeButton);
     }
 }

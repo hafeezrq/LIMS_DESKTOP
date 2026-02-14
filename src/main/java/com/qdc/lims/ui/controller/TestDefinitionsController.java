@@ -183,8 +183,7 @@ public class TestDefinitionsController {
      */
     @FXML
     private void handleClose() {
-        Stage stage = (Stage) testTable.getScene().getWindow();
-        stage.close();
+        com.qdc.lims.ui.util.ViewCloseUtil.closeCurrentTabOrWindow(testTable);
     }
 
     /**

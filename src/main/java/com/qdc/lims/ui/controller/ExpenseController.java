@@ -7,7 +7,6 @@ import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
-import javafx.stage.Stage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -161,7 +160,7 @@ public class ExpenseController {
      */
     @FXML
     private void handleClose() {
-        ((Stage) closeButton.getScene().getWindow()).close();
+        com.qdc.lims.ui.util.ViewCloseUtil.closeCurrentTabOrWindow(closeButton);
     }
 
     private void showAlert(String title, String content) {

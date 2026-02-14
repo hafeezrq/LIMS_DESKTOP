@@ -6,7 +6,6 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
-import javafx.stage.Stage;
 import org.springframework.stereotype.Component;
 
 /**
@@ -149,8 +148,7 @@ public class SupplierManagementController {
      */
     @FXML
     private void handleClose() {
-        Stage stage = (Stage) supplierListView.getScene().getWindow();
-        stage.close();
+        com.qdc.lims.ui.util.ViewCloseUtil.closeCurrentTabOrWindow(supplierListView);
     }
 
     private void showAlert(String title, String content) {
