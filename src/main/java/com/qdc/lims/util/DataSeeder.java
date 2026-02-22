@@ -7,6 +7,7 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -20,6 +21,9 @@ import java.util.List;
 @Component
 @Profile({ "dev", "test" })
 public class DataSeeder implements CommandLineRunner {
+
+    @Value("${qdc.seed.dev.enabled:false}")
+    private boolean seedEnabled;
 
     private final InventoryItemRepository inventoryRepo;
     private final DoctorRepository doctorRepo;
@@ -68,6 +72,10 @@ public class DataSeeder implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) throws Exception {
+        if (!seedEnabled) {
+            System.out.println("ℹ️ Dev/Test master data seeding is disabled.");
+            return;
+        }
 
         // Stop early if the database already contains tests.
         if (testRepo.count() > 0) {

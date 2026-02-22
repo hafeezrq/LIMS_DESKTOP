@@ -52,6 +52,9 @@ public class TestDefinitionService {
      * @return saved entity
      */
     public TestDefinition save(TestDefinition test) {
+        if (test.getActive() == null) {
+            test.setActive(true);
+        }
         return testDefinitionRepository.save(test);
     }
 

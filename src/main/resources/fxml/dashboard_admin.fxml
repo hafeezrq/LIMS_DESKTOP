@@ -40,6 +40,7 @@
                 
                 <Menu text="Test Configuration">
                     <MenuItem text="Test Definitions" onAction="#handleTestDefinitions"/>
+                    <MenuItem text="Panels" onAction="#handlePanels"/>
                     <MenuItem text="Departments" onAction="#handleTestCategories"/>
                     <MenuItem text="Test Recipes" onAction="#handleTestRecipes"/>
                     <MenuItem text="Reference Ranges" onAction="#handleReferenceRanges"/>

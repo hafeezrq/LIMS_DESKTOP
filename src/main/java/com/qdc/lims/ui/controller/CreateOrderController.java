@@ -189,7 +189,7 @@ public class CreateOrderController {
      */
     private void loadTestsIntoCategoryTabs() {
         List<TestDefinition> allTests = testRepository.findAll().stream()
-                .filter(TestDefinition::getActive)
+                .filter(test -> Boolean.TRUE.equals(test.getActive()))
                 .sorted(Comparator.comparing(TestDefinition::getTestName))
                 .collect(Collectors.toList());
 
@@ -219,7 +219,9 @@ public class CreateOrderController {
         for (Panel panel : allPanels) {
             panelsById.put(panel.getId(), panel);
             List<TestDefinition> panelTests = panel.getTests() != null
-                    ? panel.getTests().stream().filter(TestDefinition::getActive).collect(Collectors.toList())
+                    ? panel.getTests().stream()
+                            .filter(test -> Boolean.TRUE.equals(test.getActive()))
+                            .collect(Collectors.toList())
                     : List.of();
             panelTestsMap.put(panel.getId(), panelTests);
             for (TestDefinition test : panelTests) {
@@ -277,6 +279,27 @@ public class CreateOrderController {
                         bulkSelection = false;
                     } else {
                         selectedPanelIds.remove(panel.getId());
+                        bulkSelection = true;
+                        for (TestDefinition test : panelTests) {
+                            if (test.getId() == null) {
+                                continue;
+                            }
+                            Set<Integer> memberships = testPanelMembership.get(test.getId());
+                            boolean selectedInAnotherPanel = memberships != null
+                                    && memberships.stream()
+                                            .filter(memberPanelId -> !memberPanelId.equals(panel.getId()))
+                                            .map(panelCheckboxMap::get)
+                                            .anyMatch(cb -> cb != null && cb.isSelected());
+                            if (selectedInAnotherPanel) {
+                                continue;
+                            }
+
+                            CheckBox testCheckBox = testCheckboxMap.get(test.getId());
+                            if (testCheckBox != null) {
+                                testCheckBox.setSelected(false);
+                            }
+                        }
+                        bulkSelection = false;
                     }
                     updateTotalAmount();
                     updateSelectedTestsListView();
@@ -318,6 +341,25 @@ public class CreateOrderController {
             tab.setContent(panelTabPane);
             categoryTabPane.getTabs().add(tab);
         }
+
+        if (categoryTabPane.getTabs().isEmpty()) {
+            Tab tab = new Tab("Tests");
+            tab.setClosable(false);
+            VBox content = new VBox(10);
+            content.setPadding(new Insets(20));
+            Label title = new Label("No tests are configured yet.");
+            title.setStyle("-fx-font-size: 14; -fx-font-weight: bold; -fx-text-fill: #2c3e50;");
+            Label guide = new Label("Admin setup required: add departments, tests, then panels from Admin Dashboard.");
+            guide.setWrapText(true);
+            guide.setStyle("-fx-text-fill: #7f8c8d;");
+            content.getChildren().addAll(title, guide);
+
+            ScrollPane scrollPane = new ScrollPane(content);
+            scrollPane.setFitToWidth(true);
+            scrollPane.setStyle("-fx-background-color: transparent;");
+            tab.setContent(scrollPane);
+            categoryTabPane.getTabs().add(tab);
+        }
     }
 
     private VBox buildGroupedTests(List<TestDefinition> tests) {
@@ -327,7 +369,7 @@ public class CreateOrderController {
         }
 
         List<TestDefinition> sorted = tests.stream()
-                .filter(TestDefinition::getActive)
+                .filter(test -> Boolean.TRUE.equals(test.getActive()))
                 .sorted(Comparator
                         .comparing((TestDefinition test) -> categoryName(test))
                         .thenComparing(TestDefinition::getTestName))

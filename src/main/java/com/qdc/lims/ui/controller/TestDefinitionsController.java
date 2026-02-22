@@ -175,6 +175,10 @@ public class TestDefinitionsController {
      */
     @FXML
     private void handleNewTest() {
+        if (testDefinitionService.findAllDepartments().isEmpty()) {
+            showWarning("Missing Department", "Please create at least one Department before adding tests.");
+            return;
+        }
         showTestDialog(new TestDefinition());
     }
 
@@ -219,6 +223,11 @@ public class TestDefinitionsController {
      * Shows the create/edit dialog and persists the result.
      */
     private void showTestDialog(TestDefinition test) {
+        if (testDefinitionService.findAllDepartments().isEmpty()) {
+            showWarning("Missing Department", "Please create at least one Department before adding tests.");
+            return;
+        }
+
         Dialog<TestDefinition> dialog = new Dialog<>();
         dialog.setTitle(test.getId() == null ? "New Test" : "Edit Test");
         dialog.setHeaderText(null);
@@ -293,9 +302,20 @@ public class TestDefinitionsController {
 
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == saveButtonType) {
-                test.setTestName(name.getText());
-                test.setShortCode(code.getText());
+                String testName = name.getText() != null ? name.getText().trim() : "";
+                if (testName.isEmpty()) {
+                    showWarning("Validation", "Test Name is required.");
+                    return null;
+                }
+
                 Department selectedDept = deptCombo.getValue();
+                if (selectedDept == null) {
+                    showWarning("Validation", "Department is required.");
+                    return null;
+                }
+
+                test.setTestName(testName);
+                test.setShortCode(code.getText() != null ? code.getText().trim() : null);
                 test.setDepartment(selectedDept);
                 String categoryName = categoryCombo.getValue() != null
                         ? categoryCombo.getValue().getName()
@@ -303,12 +323,15 @@ public class TestDefinitionsController {
                 TestCategory resolvedCategory = testDefinitionService.findOrCreateCategory(categoryName, selectedDept);
                 test.setCategory(resolvedCategory);
                 test.setUnit(unit.getText() != null ? unit.getText().trim() : null);
+                test.setActive(true);
                 try {
-                    if (!price.getText().isEmpty()) {
-                        test.setPrice(new java.math.BigDecimal(price.getText()));
+                    String trimmedPrice = price.getText() != null ? price.getText().trim() : "";
+                    if (!trimmedPrice.isEmpty()) {
+                        test.setPrice(new java.math.BigDecimal(trimmedPrice));
                     }
                 } catch (NumberFormatException e) {
-                    // Ignore invalid price input and leave the prior value.
+                    showWarning("Validation", "Price must be a valid number.");
+                    return null;
                 }
                 return test;
             }
@@ -328,5 +351,13 @@ public class TestDefinitionsController {
                 error.show();
             }
         });
+    }
+
+    private void showWarning(String title, String content) {
+        Alert alert = new Alert(Alert.AlertType.WARNING);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(content);
+        alert.showAndWait();
     }
 }

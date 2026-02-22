@@ -208,7 +208,7 @@ public class TestRecipeController {
         alert.setTitle("Confirm Remove");
         alert.setHeaderText("Remove " + selected.getItem().getItemName() + " from recipe?");
 
-        if (alert.showAndWait().get() == ButtonType.OK) {
+        if (alert.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK) {
             consumptionRepository.delete(selected);
             loadRecipes();
             setStatus("Removed recipe item.");

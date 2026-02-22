@@ -1,5 +1,6 @@
 package com.qdc.lims.repository;
 
+import com.qdc.lims.entity.Department;
 import com.qdc.lims.entity.TestDefinition;
 import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
@@ -38,6 +39,8 @@ public interface TestDefinitionRepository extends JpaRepository<TestDefinition, 
      * @return list of tests in the department
      */
     List<TestDefinition> findByDepartment(String department);
+
+    List<TestDefinition> findByDepartmentAndActiveTrueOrderByTestNameAsc(Department department);
 
     /**
      * Searches test definitions by name (case-insensitive).

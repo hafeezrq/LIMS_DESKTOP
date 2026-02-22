@@ -56,7 +56,7 @@ public class MasterDataSeeder implements ApplicationRunner {
     private final ObjectMapper objectMapper;
     private final ResourceLoader resourceLoader;
 
-    @Value("${qdc.seed.master.enabled:true}")
+    @Value("${qdc.seed.master.enabled:false}")
     private boolean enabled;
 
     @Value("${qdc.seed.master.location:classpath:seed/master-data.json}")

@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -21,6 +22,9 @@ import java.util.Random;
 @Profile({ "dev", "test" })
 @Order(2) // Run after DataSeeder
 public class TestDataInitializer implements CommandLineRunner {
+
+    @Value("${qdc.seed.financial.enabled:false}")
+    private boolean seedEnabled;
 
     private final LabOrderRepository orderRepo;
     private final PaymentRepository paymentRepo;
@@ -49,6 +53,11 @@ public class TestDataInitializer implements CommandLineRunner {
         boolean forceSeed = Boolean.parseBoolean(System.getProperty("qdc.seed.force", "false"))
                 || Boolean.parseBoolean(System.getenv().getOrDefault("LIMS_SEED_FORCE", "false"))
                 || Boolean.parseBoolean(System.getenv().getOrDefault("QDC_SEED_FORCE", "false"));
+
+        if (!seedEnabled && !forceSeed) {
+            System.out.println("ℹ️ Dev/Test financial seeding is disabled.");
+            return;
+        }
 
         if (!forceSeed && (paymentRepo.count() > 0 || orderRepo.count() > 0)) {
             System.out.println("✅ Financial data already exists. Skipping Financial Seeder.");

@@ -233,6 +233,10 @@
 							<target>
 								<copy file="${project.build.directory}/${project.build.finalName}.jar"
 									todir="${project.build.directory}/jpackage" />
+								<copy file="${project.basedir}/docs/UAT_CLICK_BY_CLICK.md"
+									todir="${project.build.directory}/jpackage" />
+								<copy file="${project.basedir}/scripts/sql/master_data_seed.sql"
+									todir="${project.build.directory}/jpackage" />
 							</target>
 						</configuration>
 					</execution>

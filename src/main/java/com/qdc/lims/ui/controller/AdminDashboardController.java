@@ -247,6 +247,11 @@ public class AdminDashboardController {
     }
 
     @FXML
+    private void handlePanels() {
+        openAdminWindow("/fxml/panel_management.fxml", "Panel Management");
+    }
+
+    @FXML
     private void handleTestRecipes() {
         openAdminWindow("/fxml/test_recipes.fxml", "Test Recipe Management");
     }
