@@ -925,8 +925,8 @@ public class CreateOrderController {
         }
         selectedPanelIds.clear();
 
-        discountField.setText("0");
-        cashPaidField.setText("0");
+        discountField.clear();
+        cashPaidField.clear();
 
         selectedTestsCountLabel.setText("0");
         totalAmountLabel.setText(localeFormatService.formatCurrency(java.math.BigDecimal.ZERO));

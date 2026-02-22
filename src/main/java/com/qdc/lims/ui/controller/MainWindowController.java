@@ -370,7 +370,7 @@ public class MainWindowController {
         String appName = brandingService.getApplicationName();
 
         if (appHeaderLabel != null) {
-            appHeaderLabel.setText("🧪 " + appName);
+            appHeaderLabel.setText(appName);
         }
         if (welcomeTitleLabel != null) {
             welcomeTitleLabel.setText(appName);
@@ -886,7 +886,7 @@ public class MainWindowController {
             tab.setContent(dashboardContent);
 
             String roleIcon = switch (newDashboard) {
-                case ADMIN -> "⚙️";
+                case ADMIN -> "⚙";
                 case LAB -> "🔬";
                 case RECEPTION -> "🏥";
             };
@@ -989,7 +989,7 @@ public class MainWindowController {
 
             // Update tab title to show current view
             String roleIcon = switch (newDashboard) {
-                case ADMIN -> "⚙️";
+                case ADMIN -> "⚙";
                 case LAB -> "🔬";
                 case RECEPTION -> "🏥";
             };
@@ -1315,7 +1315,7 @@ public class MainWindowController {
 
             // Create custom tab header with user info
             String roleIcon = switch (dashboardType) {
-                case ADMIN -> "⚙️";
+                case ADMIN -> "⚙";
                 case LAB -> "🔬";
                 case RECEPTION -> "🏥";
             };

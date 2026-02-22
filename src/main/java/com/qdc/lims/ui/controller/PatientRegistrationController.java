@@ -59,6 +59,9 @@ public class PatientRegistrationController {
     @FXML
     private void initialize() {
         messageLabel.setText("");
+        ageSpinner.getValueFactory().setValue(1);
+        ageSpinner.getEditor().clear();
+        ageSpinner.getEditor().setPromptText("Enter age");
 
         // Add Enter key support for all text fields
         fullNameField.setOnKeyPressed(event -> {
@@ -127,7 +130,7 @@ public class PatientRegistrationController {
 
         // Validation
         String fullName = fullNameField.getText().trim();
-        Integer age = ageSpinner.getValue();
+        Integer age = parseAge();
 
         if (fullName.isEmpty()) {
             showError("Full name is required");
@@ -196,7 +199,8 @@ public class PatientRegistrationController {
     private void handleClear() {
         fullNameField.clear();
         cnicField.clear();
-        ageSpinner.getValueFactory().setValue(0);
+        ageSpinner.getValueFactory().setValue(1);
+        ageSpinner.getEditor().clear();
         genderGroup.selectToggle(null); // Deselect all gender options
         mobileField.clear();
         cityField.clear();
@@ -213,6 +217,22 @@ public class PatientRegistrationController {
     private void showError(String message) {
         messageLabel.setText("❌ " + message);
         messageLabel.setStyle("-fx-text-fill: #e74c3c; -fx-font-weight: bold;");
+    }
+
+    private Integer parseAge() {
+        String ageText = ageSpinner.getEditor().getText() != null
+                ? ageSpinner.getEditor().getText().trim()
+                : "";
+        if (ageText.isEmpty()) {
+            return null;
+        }
+        try {
+            Integer age = Integer.parseInt(ageText);
+            ageSpinner.getValueFactory().setValue(age);
+            return age;
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     @SuppressWarnings("unused")

@@ -17,7 +17,7 @@
             <!-- Application Header -->
             <HBox style="-fx-background-color: linear-gradient(to right, #2c3e50, #3498db); -fx-padding: 8 15;" 
                   spacing="15" alignment="CENTER_LEFT">
-                <Label fx:id="appHeaderLabel" text="🧪 LIMS" style="-fx-text-fill: white; -fx-font-weight: bold; -fx-cursor: default;">
+                <Label fx:id="appHeaderLabel" text="LIMS" style="-fx-text-fill: white; -fx-font-weight: bold; -fx-cursor: default;">
                     <font><Font size="18"/></font>
                 </Label>
                 <Region HBox.hgrow="ALWAYS" style="-fx-cursor: default;"/>
@@ -30,7 +30,7 @@
                         style="-fx-background-color: #27ae60; -fx-text-fill: white; -fx-font-size: 11; -fx-padding: 5 12; -fx-background-radius: 4; -fx-cursor: hand;"/>
                 <Button fx:id="labLoginBtn" text="🔬 Lab" onAction="#openLabLogin"
                         style="-fx-background-color: #9b59b6; -fx-text-fill: white; -fx-font-size: 11; -fx-padding: 5 12; -fx-background-radius: 4; -fx-cursor: hand;"/>
-                <Button fx:id="adminLoginBtn" text="⚙️ Admin" onAction="#openAdminLogin"
+                <Button fx:id="adminLoginBtn" text="⚙ Admin" onAction="#openAdminLogin"
                         style="-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-font-size: 11; -fx-padding: 5 12; -fx-background-radius: 4; -fx-cursor: hand;"/>
                 
                 <Separator orientation="VERTICAL" style="-fx-background-color: rgba(255,255,255,0.3); -fx-cursor: default;"/>
@@ -113,7 +113,7 @@
                     <VBox alignment="CENTER" spacing="8" 
                           style="-fx-background-color: white; -fx-padding: 20; -fx-background-radius: 10; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 10, 0, 0, 2); -fx-cursor: hand;"
                           onMouseClicked="#openAdminLogin" prefWidth="180">
-                        <Label text="⚙️" style="-fx-font-size: 32;"/>
+                        <Label text="⚙" style="-fx-font-size: 32;"/>
                         <Label text="Administrator" style="-fx-font-weight: bold; -fx-text-fill: #e74c3c;">
                             <font><Font size="16"/></font>
                         </Label>
