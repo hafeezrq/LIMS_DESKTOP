@@ -5,6 +5,7 @@ import com.lowagie.text.pdf.*;
 import com.qdc.lims.entity.*;
 import com.qdc.lims.repository.LabOrderRepository;
 import com.qdc.lims.repository.ReferenceRangeRepository;
+import com.qdc.lims.util.LabResultDisplayOrder;
 import org.springframework.stereotype.Service;
 
 import java.awt.Color;
@@ -160,7 +161,11 @@ public class ReportService {
         addCell(table, "Unit", true);
         addCell(table, "Reference Range", true);
 
-        for (LabResult result : results) {
+        List<LabResult> sortedResults = results.stream()
+                .sorted(LabResultDisplayOrder.comparator())
+                .toList();
+
+        for (LabResult result : sortedResults) {
             addCell(table, result.getTestDefinition().getTestName(), false);
 
             Font resultFont = FontFactory.getFont(FontFactory.HELVETICA, 11);

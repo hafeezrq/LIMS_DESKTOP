@@ -115,6 +115,9 @@ public class ResultService {
             // Fetch the real result from DB
             LabResult dbResult = repository.findById(resultFromForm.getId()).orElseThrow();
             String val = resultFromForm.getResultValue();
+            if (dbResult.getStatus() == null || dbResult.getStatus().trim().isEmpty()) {
+                dbResult.setStatus("PENDING");
+            }
 
             // =========================================================
             // FIX START: Only update if the new value is NOT Empty/Null
@@ -126,6 +129,7 @@ public class ResultService {
                 // Audit Stamp
                 dbResult.setPerformedBy(currentUser);
                 dbResult.setPerformedAt(LocalDateTime.now());
+                dbResult.setStatus("COMPLETED");
 
                 // --- Apply High/Low Logic (Moved inside the check) ---
                 TestDefinition test = dbResult.getTestDefinition();
@@ -140,7 +144,9 @@ public class ResultService {
                     ReferenceRange matchingRule = findMatchingRange(test, patient);
 
                     // 5. Apply High/Low Logic
-                    if (matchingRule != null) {
+                    if (matchingRule != null
+                            && matchingRule.getMinVal() != null
+                            && matchingRule.getMaxVal() != null) {
                         if (numVal.compareTo(matchingRule.getMinVal()) < 0) {
                             dbResult.setAbnormal(true);
                             dbResult.setRemarks("LOW");
@@ -236,7 +242,9 @@ public class ResultService {
 
                     ReferenceRange matchingRule = findMatchingRange(test, patient);
 
-                    if (matchingRule != null) {
+                    if (matchingRule != null
+                            && matchingRule.getMinVal() != null
+                            && matchingRule.getMaxVal() != null) {
                         if (numVal.compareTo(matchingRule.getMinVal()) < 0) {
                             dbResult.setAbnormal(true);
                             dbResult.setRemarks("LOW");

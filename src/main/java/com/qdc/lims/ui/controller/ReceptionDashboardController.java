@@ -16,6 +16,9 @@ import com.qdc.lims.repository.PanelRepository;
 import com.qdc.lims.repository.ReferenceRangeRepository;
 import com.qdc.lims.service.LocaleFormatService;
 import com.qdc.lims.service.OrderCancellationService;
+import com.qdc.lims.service.ReportPrintProgressService;
+import com.qdc.lims.util.LabResultDisplayOrder;
+import com.qdc.lims.util.ReportPrintState;
 import javafx.animation.Animation;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
@@ -28,7 +31,11 @@ import javafx.fxml.FXMLLoader;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.print.PageLayout;
+import javafx.print.PageOrientation;
+import javafx.print.Paper;
+import javafx.print.Printer;
 import javafx.print.PrinterJob;
+import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -44,6 +51,7 @@ import javafx.scene.text.Text;
 import javafx.scene.text.TextFlow;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
+import javafx.stage.Window;
 
 import org.springframework.context.ApplicationContext;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -52,11 +60,13 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.math.BigDecimal;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.ArrayList;
+import java.util.Set;
 import javafx.util.Duration;
 
 /**
@@ -73,6 +83,7 @@ public class ReceptionDashboardController {
     private final BrandingService brandingService;
     private final LocaleFormatService localeFormatService;
     private final OrderCancellationService orderCancellationService;
+    private final ReportPrintProgressService reportPrintProgressService;
 
     // Auto-refresh timer for real-time count updates
     private Timeline autoRefreshTimeline;
@@ -160,6 +171,8 @@ public class ReceptionDashboardController {
     @FXML
     private TableColumn<LabOrder, String> deliveredDeliveryDateCol;
     @FXML
+    private TableColumn<LabOrder, String> deliveredReportStatusCol;
+    @FXML
     private TableColumn<LabOrder, Void> deliveredActionCol;
 
     // Data
@@ -173,7 +186,8 @@ public class ReceptionDashboardController {
             ReferenceRangeRepository referenceRangeRepository,
             BrandingService brandingService,
             LocaleFormatService localeFormatService,
-            OrderCancellationService orderCancellationService) {
+            OrderCancellationService orderCancellationService,
+            ReportPrintProgressService reportPrintProgressService) {
         this.applicationContext = applicationContext;
         this.labOrderRepository = labOrderRepository;
         this.panelRepository = panelRepository;
@@ -181,6 +195,7 @@ public class ReceptionDashboardController {
         this.brandingService = brandingService;
         this.localeFormatService = localeFormatService;
         this.orderCancellationService = orderCancellationService;
+        this.reportPrintProgressService = reportPrintProgressService;
     }
 
     @FXML
@@ -189,6 +204,7 @@ public class ReceptionDashboardController {
         setupReadyOrdersTable();
         setupPendingOrdersTable();
         setupDeliveredOrdersTable();
+        ensureOrdersTabsVisible();
         localeFormatService.applyDatePickerLocale(deliveredFromDatePicker, deliveredToDatePicker);
         initializeDeliveredDateRange();
         loadOrders();
@@ -236,7 +252,7 @@ public class ReceptionDashboardController {
                             .collect(Collectors.toList());
 
                     long newReadyCount = allOrders.stream()
-                            .filter(o -> "COMPLETED".equals(o.getStatus()) && !o.isReportDelivered())
+                            .filter(o -> "COMPLETED".equals(o.getStatus()) && reportPrintProgressService.isReadySectionState(o))
                             .count();
 
                     long newPendingCount = allOrders.stream()
@@ -439,10 +455,14 @@ public class ReceptionDashboardController {
                     dt != null ? localeFormatService.formatDateTime(dt) : "-");
         });
         deliveredDeliveryDateCol.setCellValueFactory(data -> {
-            LocalDateTime dt = data.getValue().getDeliveryDate();
+            LocalDateTime dt = getDeliveredActivityDate(data.getValue());
             return new SimpleStringProperty(
                     dt != null ? localeFormatService.formatDateTime(dt) : "-");
         });
+        if (deliveredReportStatusCol != null) {
+            deliveredReportStatusCol.setCellValueFactory(
+                    data -> new SimpleStringProperty(reportPrintProgressService.buildSubStatusLabel(data.getValue())));
+        }
 
         deliveredActionCol.setCellFactory(col -> new TableCell<LabOrder, Void>() {
             private final Button reprintBtn = new Button("Reprint");
@@ -468,11 +488,20 @@ public class ReceptionDashboardController {
                     return;
                 }
 
+                String reportState = reportPrintProgressService.normalizeState(order);
+                boolean partialOrPending = ReportPrintState.PARTIALLY_PRINTED.equals(reportState)
+                        || ReportPrintState.FULLY_PRINTED.equals(reportState);
+
                 if (order.isReprintRequired()) {
-                    reprintBtn.setText("Reprint");
+                    reprintBtn.setText(partialOrPending ? "Continue Print" : "Reprint");
                     reprintBtn.setTooltip(new Tooltip("Reprint required due to edited delivered report."));
                     reprintBtn.setStyle(
                             "-fx-background-color: #e67e22; -fx-text-fill: white; -fx-font-size: 11; -fx-padding: 3 10;");
+                } else if (partialOrPending) {
+                    reprintBtn.setText("Continue Print");
+                    reprintBtn.setTooltip(new Tooltip("Open print workflow to complete remaining departments."));
+                    reprintBtn.setStyle(
+                            "-fx-background-color: #8e44ad; -fx-text-fill: white; -fx-font-size: 11; -fx-padding: 3 10;");
                 } else {
                     reprintBtn.setText("Reprint");
                     reprintBtn.setTooltip(new Tooltip("Reprint report"));
@@ -488,15 +517,13 @@ public class ReceptionDashboardController {
 
     private void loadOrders() {
         try {
+            ensureOrdersTabsVisible();
             LocalDateTime startDate = LocalDateTime.now().minusDays(30);
             LocalDateTime endDate = LocalDateTime.now().plusDays(1);
             List<LabOrder> allOrders = labOrderRepository.findByOrderDateBetween(startDate, endDate);
             LocalDateTime deliveredStart = getDeliveredRangeStart();
             LocalDateTime deliveredEnd = getDeliveredRangeEnd();
-            List<LabOrder> delivered = labOrderRepository
-                    .findByIsReportDeliveredTrueAndDeliveryDateBetween(deliveredStart, deliveredEnd);
-            List<LabOrder> reprintRequired = labOrderRepository.findByReprintRequiredTrue();
-            delivered = mergeDeliveredLists(delivered, reprintRequired);
+            List<LabOrder> delivered = loadDeliveredOrdersWithinRange(deliveredStart, deliveredEnd);
 
             // Align with lab worklist: ignore orders that have no tests/results attached.
             allOrders = allOrders.stream()
@@ -504,7 +531,8 @@ public class ReceptionDashboardController {
                     .collect(Collectors.toList());
 
             List<LabOrder> ready = allOrders.stream()
-                    .filter(o -> "COMPLETED".equals(o.getStatus()) && !o.isReportDelivered())
+                    .filter(o -> "COMPLETED".equals(o.getStatus()))
+                    .filter(reportPrintProgressService::isReadySectionState)
                     .collect(Collectors.toList());
 
             List<LabOrder> pending = allOrders.stream()
@@ -527,6 +555,64 @@ public class ReceptionDashboardController {
             showError("Failed to load orders: " + e.getMessage());
             e.printStackTrace();
         }
+    }
+
+    private void ensureOrdersTabsVisible() {
+        if (ordersTabPane == null) {
+            return;
+        }
+        ordersTabPane.setVisible(true);
+        ordersTabPane.setManaged(true);
+        if (ordersTabPane.getSelectionModel().getSelectedItem() == null && !ordersTabPane.getTabs().isEmpty()) {
+            ordersTabPane.getSelectionModel().select(0);
+        }
+    }
+
+    private List<LabOrder> loadDeliveredOrdersWithinRange(LocalDateTime start, LocalDateTime end) {
+        Map<Long, LabOrder> merged = new java.util.LinkedHashMap<>();
+
+        List<LabOrder> byProgressDate = labOrderRepository.findByReportProgressUpdatedAtBetween(start, end);
+        for (LabOrder order : byProgressDate) {
+            if (reportPrintProgressService.isDeliveredSectionState(order)) {
+                merged.put(order.getId(), order);
+            }
+        }
+
+        List<LabOrder> legacyDelivered = labOrderRepository.findByIsReportDeliveredTrueAndDeliveryDateBetween(start, end);
+        for (LabOrder order : legacyDelivered) {
+            merged.put(order.getId(), order);
+        }
+
+        List<LabOrder> orders = new ArrayList<>(merged.values());
+        orders.removeIf(order -> order.getResults() == null || order.getResults().isEmpty());
+        orders.sort((a, b) -> {
+            LocalDateTime aTime = getDeliveredActivityDate(a);
+            LocalDateTime bTime = getDeliveredActivityDate(b);
+            if (aTime == null && bTime == null) {
+                return Long.compare(b.getId(), a.getId());
+            }
+            if (aTime == null) {
+                return 1;
+            }
+            if (bTime == null) {
+                return -1;
+            }
+            return bTime.compareTo(aTime);
+        });
+        return orders;
+    }
+
+    private LocalDateTime getDeliveredActivityDate(LabOrder order) {
+        if (order == null) {
+            return null;
+        }
+        if (order.getDeliveryDate() != null) {
+            return order.getDeliveryDate();
+        }
+        if (order.getReportProgressUpdatedAt() != null) {
+            return order.getReportProgressUpdatedAt();
+        }
+        return order.getOrderDate();
     }
 
     private void handleCancelOrder(LabOrder order) {
@@ -714,7 +800,8 @@ public class ReceptionDashboardController {
         List<LabOrder> allOrders = labOrderRepository.findByOrderDateBetween(startDate, endDate);
 
         List<LabOrder> filteredReady = allOrders.stream()
-                .filter(o -> "COMPLETED".equals(o.getStatus()) && !o.isReportDelivered())
+                .filter(o -> "COMPLETED".equals(o.getStatus()))
+                .filter(reportPrintProgressService::isReadySectionState)
                 .filter(o -> matchesSearch(o, searchTerm))
                 .collect(Collectors.toList());
 
@@ -736,10 +823,7 @@ public class ReceptionDashboardController {
 
         LocalDateTime startDate = getDeliveredRangeStart();
         LocalDateTime endDate = getDeliveredRangeEnd();
-        List<LabOrder> deliveredOrdersAll = labOrderRepository
-                .findByIsReportDeliveredTrueAndDeliveryDateBetween(startDate, endDate);
-        List<LabOrder> reprintRequired = labOrderRepository.findByReprintRequiredTrue();
-        deliveredOrdersAll = mergeDeliveredLists(deliveredOrdersAll, reprintRequired);
+        List<LabOrder> deliveredOrdersAll = loadDeliveredOrdersWithinRange(startDate, endDate);
         if (searchTerm.isEmpty()) {
             deliveredOrdersTable.setItems(FXCollections.observableArrayList(deliveredOrdersAll));
             return;
@@ -843,7 +927,7 @@ public class ReceptionDashboardController {
                 return;
             order = labOrderRepository.findById(order.getId()).orElse(order);
         }
-        showReportDeliveryDialog(order);
+        showReportDeliveryDialog(order, false);
     }
 
     private boolean showPaymentDialog(LabOrder order) {
@@ -896,10 +980,14 @@ public class ReceptionDashboardController {
         return false;
     }
 
-    private void showReportDeliveryDialog(LabOrder order) {
+    private void showReportDeliveryDialog(LabOrder order, boolean reprintMode) {
+        LabOrder freshOrder = labOrderRepository.findById(order.getId()).orElse(order);
+        ReportPrintProgressService.ReportProgressSnapshot snapshot = reportPrintProgressService
+                .synchronizeAndGetSnapshot(freshOrder);
+
         Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle("Report Delivery");
-        dialog.setHeaderText("Deliver Report for Order #" + order.getId());
+        dialog.setTitle(reprintMode ? "Reprint Report" : "Report Delivery");
+        dialog.setHeaderText((reprintMode ? "Reprint Report for Order #" : "Deliver Report for Order #") + order.getId());
         dialog.initModality(Modality.APPLICATION_MODAL);
         dialog.setResizable(true);
 
@@ -907,77 +995,133 @@ public class ReceptionDashboardController {
         content.setPadding(new Insets(20));
         content.setPrefWidth(480);
 
-        Patient patient = order.getPatient();
+        Patient patient = freshOrder.getPatient();
         String patientName = patient != null && patient.getFullName() != null ? patient.getFullName() : "-";
         String patientMrn = patient != null && patient.getMrn() != null ? patient.getMrn() : "-";
         content.getChildren().add(new Label("Patient: " + patientName));
         content.getChildren().add(new Label("MRN: " + patientMrn));
         content.getChildren().add(new Separator());
-        content.getChildren().add(new Label("Test Results:"));
 
-        if (order.getResults() != null && !order.getResults().isEmpty()) {
-            for (LabResult result : order.getResults()) {
-                String testName = result.getTestDefinition() != null ? result.getTestDefinition().getTestName()
-                        : "Unknown Test";
-                String value = result.getResultValue() != null ? result.getResultValue() : "Pending";
-                String abnormal = result.isAbnormal() ? " (ABNORMAL)" : "";
-                Label resultLabel = new Label("  - " + testName + ": " + value + abnormal);
-                if (result.isAbnormal())
-                    resultLabel.setStyle("-fx-text-fill: #e74c3c; -fx-font-weight: bold;");
-                content.getChildren().add(resultLabel);
-            }
-        } else {
-            content.getChildren().add(new Label("  No results entered yet."));
-        }
-        content.getChildren().add(new Separator());
-
-        String paymentStatus = (order.getBalanceDue() == null
-                || order.getBalanceDue().compareTo(java.math.BigDecimal.ZERO) <= 0)
+        String paymentStatus = (freshOrder.getBalanceDue() == null
+                || freshOrder.getBalanceDue().compareTo(java.math.BigDecimal.ZERO) <= 0)
                         ? "FULLY PAID"
-                        : "Balance Due: " + localeFormatService.formatCurrency(order.getBalanceDue());
+                        : "Balance Due: " + localeFormatService.formatCurrency(freshOrder.getBalanceDue());
         Label paymentLabel = new Label("Payment Status: " + paymentStatus);
-        paymentLabel.setStyle((order.getBalanceDue() == null
-                || order.getBalanceDue().compareTo(java.math.BigDecimal.ZERO) <= 0)
+        paymentLabel.setStyle((freshOrder.getBalanceDue() == null
+                || freshOrder.getBalanceDue().compareTo(java.math.BigDecimal.ZERO) <= 0)
                         ? "-fx-text-fill: #27ae60; -fx-font-weight: bold;"
                         : "-fx-text-fill: #e74c3c; -fx-font-weight: bold;");
         content.getChildren().add(paymentLabel);
 
-        // --- KEY CHANGES START HERE ---
+        List<String> availableDepartments = snapshot.departments();
+        List<String> defaultSelection = reportPrintProgressService.defaultSelectionForPrint(snapshot, freshOrder);
+        Map<String, CheckBox> departmentCheckboxes = new java.util.LinkedHashMap<>();
+        Label printedStatusLabel = null;
 
-        // 2. Wrap the VBox in a ScrollPane
+        if (!availableDepartments.isEmpty()) {
+            content.getChildren().add(new Separator());
+            Label sectionLabel = new Label("Departments to Print:");
+            sectionLabel.setStyle("-fx-font-weight: bold;");
+            content.getChildren().add(sectionLabel);
+
+            for (String department : availableDepartments) {
+                CheckBox checkBox = new CheckBox(department);
+                checkBox.setSelected(defaultSelection.contains(department));
+                departmentCheckboxes.put(department, checkBox);
+                content.getChildren().add(checkBox);
+            }
+
+            printedStatusLabel = new Label();
+            printedStatusLabel.setWrapText(true);
+            updatePrintedStatusLabel(printedStatusLabel, snapshot);
+            content.getChildren().add(printedStatusLabel);
+        }
+
         ScrollPane scrollPane = new ScrollPane(content);
-        scrollPane.setFitToWidth(true); // Ensures the VBox takes up the full width of the scroll pane
-        scrollPane.setPrefHeight(400); // Set a default height
-        scrollPane.setMaxHeight(600); // Prevent it from growing larger than most screens
+        scrollPane.setFitToWidth(true);
+        scrollPane.setPrefHeight(400);
+        scrollPane.setMaxHeight(600);
         scrollPane.setPadding(new Insets(5));
-
-        // 3. Set the ScrollPane as the dialog content instead of the VBox
         dialog.getDialogPane().setContent(scrollPane);
 
-        // --- KEY CHANGES END HERE ---
-
-        // dialog.getDialogPane().setContent(content);
-        ButtonType printAndDeliverBtn = new ButtonType("Print & Mark Delivered", ButtonBar.ButtonData.OK_DONE);
+        ButtonType previewBtn = new ButtonType("Preview", ButtonBar.ButtonData.OTHER);
+        ButtonType printBtn = new ButtonType("Print", ButtonBar.ButtonData.OK_DONE);
         ButtonType markDeliveredBtn = new ButtonType("Mark Delivered Only", ButtonBar.ButtonData.APPLY);
-        dialog.getDialogPane().getButtonTypes().addAll(printAndDeliverBtn, markDeliveredBtn, ButtonType.CANCEL);
+        dialog.getDialogPane().getButtonTypes().addAll(previewBtn, printBtn, markDeliveredBtn, ButtonType.CANCEL);
 
-        Optional<ButtonType> result = dialog.showAndWait();
-        if (result.isPresent()) {
-            if (result.get() == printAndDeliverBtn) {
-                if (printReport(order)) {
-                    markAsDelivered(order);
+        Button previewButton = (Button) dialog.getDialogPane().lookupButton(previewBtn);
+        Button printButton = (Button) dialog.getDialogPane().lookupButton(printBtn);
+
+        Runnable refreshActionButtons = () -> {
+            boolean hasSelection = !getSelectedDepartments(departmentCheckboxes).isEmpty();
+            previewButton.setDisable(!hasSelection);
+            printButton.setDisable(!hasSelection);
+        };
+
+        departmentCheckboxes.values().forEach(checkBox -> checkBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
+            refreshActionButtons.run();
+        }));
+        refreshActionButtons.run();
+        Window dialogOwner = mainContainer != null && mainContainer.getScene() != null
+                ? mainContainer.getScene().getWindow()
+                : null;
+
+        while (true) {
+            Optional<ButtonType> result = dialog.showAndWait();
+            if (result.isEmpty() || result.get() == ButtonType.CANCEL) {
+                break;
+            }
+
+            if (result.get() == previewBtn) {
+                List<String> selected = getSelectedDepartments(departmentCheckboxes);
+                if (selected.isEmpty()) {
+                    showError("Select at least one department to preview.");
+                    continue;
                 }
-            } else if (result.get() == markDeliveredBtn) {
-                markAsDelivered(order);
+                showReportPreview(freshOrder, selected, dialogOwner);
+                continue;
+            }
+
+            if (result.get() == printBtn) {
+                List<String> selected = getSelectedDepartments(departmentCheckboxes);
+                if (selected.isEmpty()) {
+                    showError("Select at least one department to print.");
+                    continue;
+                }
+                if (!printReport(freshOrder, selected)) {
+                    continue;
+                }
+
+                snapshot = reportPrintProgressService.markDepartmentsPrinted(freshOrder, selected, getCurrentUsername());
+                freshOrder = labOrderRepository.findById(freshOrder.getId()).orElse(freshOrder);
+                if (printedStatusLabel != null) {
+                    updatePrintedStatusLabel(printedStatusLabel, snapshot);
+                }
+                if (reprintMode) {
+                    markReprintCompleted(freshOrder);
+                }
+                boolean allPrinted = snapshot.allPrinted();
+                if (!allPrinted) {
+                    showAlert("Partial Print",
+                            "Only selected departments were printed. Order is now visible in Delivered with partial status.");
+                    loadOrders();
+                    continue;
+                }
+
+                markAsDelivered(freshOrder);
+                break;
+            }
+
+            if (result.get() == markDeliveredBtn) {
+                markAsDelivered(freshOrder);
+                break;
             }
         }
     }
 
     private void markAsDelivered(LabOrder order) {
         try {
-            order.setReportDelivered(true);
-            order.setDeliveryDate(LocalDateTime.now());
-            labOrderRepository.save(order);
+            reportPrintProgressService.markDelivered(order, getCurrentUsername());
             showAlert("Report Delivered", "Report for Order #" + order.getId() + " has been marked as delivered.");
             loadOrders();
         } catch (ObjectOptimisticLockingFailureException e) {
@@ -988,9 +1132,7 @@ public class ReceptionDashboardController {
     }
 
     private void handleReprintReport(LabOrder order) {
-        if (printReport(order)) {
-            markReprintCompleted(order);
-        }
+        showReportDeliveryDialog(order, true);
     }
 
     private void markReprintCompleted(LabOrder order) {
@@ -1009,11 +1151,15 @@ public class ReceptionDashboardController {
         }
     }
 
-    private boolean printReport(LabOrder order) {
+    private boolean printReport(LabOrder order, List<String> selectedDepartments) {
         PrinterJob job = PrinterJob.createPrinterJob();
         if (job != null && job.showPrintDialog(mainContainer.getScene().getWindow())) {
             PageLayout pageLayout = job.getJobSettings().getPageLayout();
-            List<StackPane> pages = buildReportPages(order, pageLayout);
+            List<StackPane> pages = buildReportPages(order, pageLayout, selectedDepartments);
+            if (pages.isEmpty()) {
+                showError("No printable results found for selected department(s).");
+                return false;
+            }
             boolean success = true;
             for (StackPane page : pages) {
                 page.applyCss();
@@ -1033,13 +1179,13 @@ public class ReceptionDashboardController {
         return false;
     }
 
-    private List<StackPane> buildReportPages(LabOrder order, PageLayout pageLayout) {
+    private List<StackPane> buildReportPages(LabOrder order, PageLayout pageLayout, List<String> selectedDepartments) {
         double printableWidth = pageLayout.getPrintableWidth();
         double printableHeight = pageLayout.getPrintableHeight();
         // Reserve space for pre-printed letterhead: 5.5 cm from the top.
         double topInset = (5.5 / 2.54) * 72.0;
         double safeTopInset = Math.min(topInset, printableHeight * 0.35);
-        double bottomInset = (2.0 / 2.54) * 72.0;
+        double bottomInset = 1.5 * 72.0;
         double contentWidth = Math.min(620, printableWidth * 0.9);
         double availableHeight = printableHeight - safeTopInset - bottomInset;
         // double headerInset = 36.0;
@@ -1082,45 +1228,215 @@ public class ReceptionDashboardController {
         attachPatientHeader(pages.get(pages.size() - 1), patientInfo, printableWidth, pageLayout);
         addNodeToPage(pageContext, createSpacer(6), contentWidth);
 
-        Map<String, List<LabResult>> byDepartment = buildResultsByDepartment(order);
+        Map<String, List<LabResult>> byDepartment = buildResultsByDepartment(order, selectedDepartments);
         for (Map.Entry<String, List<LabResult>> entry : byDepartment.entrySet()) {
             pageContext = addDepartmentToPages(entry.getKey(), entry.getValue(), pageContext, pages,
                     printableWidth, printableHeight, safeTopInset, bottomInset, contentWidth, availableHeight);
         }
 
-        Label footer = new Label("This is a computer-generated report.");
-        footer.setStyle("-fx-font-size: 8; -fx-text-fill: #555555;");
-        addNodeToPage(pageContext, footer, contentWidth);
-
         return pages;
     }
 
-    private Map<String, List<LabResult>> buildResultsByDepartment(LabOrder order) {
+    private Map<String, List<LabResult>> buildResultsByDepartment(LabOrder order, List<String> selectedDepartments) {
+        Set<String> departmentFilter = selectedDepartments == null
+                ? java.util.Collections.emptySet()
+                : selectedDepartments.stream().collect(Collectors.toCollection(LinkedHashSet::new));
+
         List<LabResult> results = order.getResults() != null ? order.getResults() : List.of();
         return results.stream()
-                .collect(Collectors.groupingBy(result -> {
-                    if (result.getTestDefinition() != null
-                            && result.getTestDefinition().getDepartment() != null
-                            && result.getTestDefinition().getDepartment().getName() != null) {
-                        return result.getTestDefinition().getDepartment().getName();
+                .filter(result -> {
+                    if (departmentFilter.isEmpty()) {
+                        return true;
                     }
-                    return "Other";
+                    String departmentName = resolveDepartmentName(result);
+                    return departmentFilter.contains(departmentName);
+                })
+                .collect(Collectors.groupingBy(result -> {
+                    return resolveDepartmentName(result);
                 }, java.util.TreeMap::new, Collectors.toList()));
+    }
+
+    private String resolveDepartmentName(LabResult result) {
+        if (result != null
+                && result.getTestDefinition() != null
+                && result.getTestDefinition().getDepartment() != null
+                && result.getTestDefinition().getDepartment().getName() != null
+                && !result.getTestDefinition().getDepartment().getName().isBlank()) {
+            return result.getTestDefinition().getDepartment().getName();
+        }
+        return "Other";
+    }
+
+    private List<String> getSelectedDepartments(Map<String, CheckBox> departmentCheckboxes) {
+        if (departmentCheckboxes == null || departmentCheckboxes.isEmpty()) {
+            return List.of();
+        }
+        return departmentCheckboxes.entrySet().stream()
+                .filter(entry -> entry.getValue() != null && entry.getValue().isSelected())
+                .map(Map.Entry::getKey)
+                .toList();
+    }
+
+    private void updatePrintedStatusLabel(Label statusLabel, ReportPrintProgressService.ReportProgressSnapshot snapshot) {
+        if (statusLabel == null) {
+            return;
+        }
+        if (snapshot == null || snapshot.departments() == null || snapshot.departments().isEmpty()) {
+            statusLabel.setText("Printed departments: 0/0 | Remaining: 0 | State: NOT_PRINTED");
+            return;
+        }
+        String printedSummary = snapshot.printedCount() + "/" + snapshot.totalCount();
+        String remaining = String.valueOf(Math.max(snapshot.totalCount() - snapshot.printedCount(), 0));
+        String state = snapshot.state() != null ? snapshot.state() : ReportPrintState.NOT_PRINTED;
+        statusLabel.setText("Printed departments: " + printedSummary + " | Remaining: " + remaining
+                + " | State: " + state);
+    }
+
+    private void showReportPreview(LabOrder order, List<String> selectedDepartments, Window ownerWindow) {
+        PageLayout previewLayout = resolvePreviewPageLayout();
+        if (previewLayout == null) {
+            showError("Preview unavailable: no printer/page layout found.");
+            return;
+        }
+
+        List<StackPane> pages = buildReportPages(order, previewLayout, selectedDepartments);
+        if (pages.isEmpty()) {
+            showError("No printable results found for selected department(s).");
+            return;
+        }
+
+        VBox pagesContainer = new VBox(16);
+        pagesContainer.setPadding(new Insets(16));
+        pagesContainer.setStyle("-fx-background-color: #f2f2f2;");
+
+        final double previewPageWidth = 760;
+
+        for (int i = 0; i < pages.size(); i++) {
+            StackPane page = pages.get(i);
+            page.resize(page.getPrefWidth(), page.getPrefHeight());
+            page.applyCss();
+            page.layout();
+
+            double pageWidth = page.getWidth() > 0 ? page.getWidth() : page.getPrefWidth();
+            double pageHeight = page.getHeight() > 0 ? page.getHeight() : page.getPrefHeight();
+            if (pageWidth <= 0) {
+                pageWidth = 595; // A4 width in points fallback.
+            }
+            if (pageHeight <= 0) {
+                pageHeight = 842; // A4 height in points fallback.
+            }
+
+            double scale = previewPageWidth / pageWidth;
+
+            Group scaledPage = new Group(page);
+            scaledPage.setScaleX(scale);
+            scaledPage.setScaleY(scale);
+
+            StackPane pageFrame = new StackPane(scaledPage);
+            pageFrame.setPadding(new Insets(8));
+            pageFrame.setPrefWidth(previewPageWidth + 20);
+            pageFrame.setMinHeight(pageHeight * scale + 20);
+            pageFrame.setStyle("-fx-background-color: white; -fx-border-color: #c9c9c9; -fx-border-width: 1;");
+
+            Label pageLabel = new Label("Page " + (i + 1));
+            pageLabel.setStyle("-fx-font-weight: bold;");
+
+            VBox pageBlock = new VBox(6, pageLabel, pageFrame);
+            pagesContainer.getChildren().add(pageBlock);
+        }
+
+        ScrollPane scrollPane = new ScrollPane(pagesContainer);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setPannable(true);
+
+        Label header = new Label("Preview - Order #" + order.getId() + " (" + String.join(", ", selectedDepartments) + ")");
+        header.setStyle("-fx-font-size: 14; -fx-font-weight: bold;");
+
+        BorderPane root = new BorderPane();
+        root.setTop(new VBox(header, new Separator()));
+        BorderPane.setMargin(root.getTop(), new Insets(10, 10, 0, 10));
+        root.setCenter(scrollPane);
+
+        Button closeBtn = new Button("Close");
+        closeBtn.setOnAction(e -> {
+            Stage stage = (Stage) closeBtn.getScene().getWindow();
+            stage.close();
+        });
+        HBox footer = new HBox(closeBtn);
+        footer.setAlignment(Pos.CENTER_RIGHT);
+        footer.setPadding(new Insets(10));
+        root.setBottom(footer);
+
+        Stage previewStage = new Stage();
+        if (ownerWindow != null) {
+            previewStage.initOwner(ownerWindow);
+            previewStage.initModality(Modality.WINDOW_MODAL);
+        }
+        brandingService.tagStage(previewStage, "Report Preview");
+        previewStage.setScene(new Scene(root, 860, 760));
+        previewStage.showAndWait();
+    }
+
+    private PageLayout resolvePreviewPageLayout() {
+        PrinterJob job = PrinterJob.createPrinterJob();
+        if (job != null) {
+            return job.getJobSettings().getPageLayout();
+        }
+        Printer printer = Printer.getDefaultPrinter();
+        if (printer != null) {
+            return printer.createPageLayout(Paper.A4, PageOrientation.PORTRAIT, Printer.MarginType.DEFAULT);
+        }
+        return null;
     }
 
     private PageContext addDepartmentToPages(String departmentName, List<LabResult> results,
             PageContext pageContext, List<StackPane> pages, double printableWidth, double printableHeight,
             double topInset, double bottomInset, double contentWidth, double availableHeight) {
         List<LabResult> departmentResults = results.stream()
-                .sorted((a, b) -> {
-                    String aName = a.getTestDefinition() != null ? a.getTestDefinition().getTestName() : "";
-                    String bName = b.getTestDefinition() != null ? b.getTestDefinition().getTestName() : "";
-                    return aName.compareToIgnoreCase(bName);
-                })
+                .sorted(LabResultDisplayOrder.comparator())
                 .collect(Collectors.toList());
 
-        Label deptLabel = createDepartmentLabel(departmentName);
+        VBox departmentSection = buildDepartmentSection(departmentName, departmentResults, contentWidth);
+        double requiredHeight = measureNodeHeight(departmentSection, contentWidth);
 
+        // Core rule: if whole department cannot fit in remaining space, move the whole
+        // department to a new page (provided it can fit on one page).
+        if (requiredHeight <= pageContext.availableHeight && pageContext.remainingHeight < requiredHeight) {
+            pageContext = newPage(pages, printableWidth, printableHeight, topInset, bottomInset, contentWidth,
+                    availableHeight);
+        }
+
+        // If a single department is too tall to fit one page, retain old row-splitting
+        // behavior as fallback to avoid clipping content.
+        if (requiredHeight > pageContext.availableHeight) {
+            return addLargeDepartmentWithRowSplit(departmentName, departmentResults, pageContext, pages,
+                    printableWidth, printableHeight, topInset, bottomInset, contentWidth, availableHeight);
+        }
+
+        addNodeToPage(pageContext, departmentSection, contentWidth);
+        return pageContext;
+    }
+
+    private VBox buildDepartmentSection(String departmentName, List<LabResult> departmentResults, double contentWidth) {
+        Label deptLabel = createDepartmentLabel(departmentName);
+        GridPane table = createResultsTable(contentWidth);
+        addTableHeader(table);
+
+        int rowIndex = 1;
+        for (LabResult result : departmentResults) {
+            addTableRow(table, rowIndex++, result, departmentName);
+        }
+
+        Region spacer = createSpacer(4);
+        VBox section = new VBox(2, deptLabel, table, spacer);
+        section.setPrefWidth(contentWidth);
+        return section;
+    }
+
+    private PageContext addLargeDepartmentWithRowSplit(String departmentName, List<LabResult> departmentResults,
+            PageContext pageContext, List<StackPane> pages, double printableWidth, double printableHeight,
+            double topInset, double bottomInset, double contentWidth, double availableHeight) {
+        Label deptLabel = createDepartmentLabel(departmentName);
         GridPane table = createResultsTable(contentWidth);
         addTableHeader(table);
 
@@ -1452,17 +1768,6 @@ public class ReceptionDashboardController {
         }
         User fallback = SessionManager.getCurrentUser();
         return fallback != null && fallback.getUsername() != null ? fallback.getUsername() : "UNKNOWN";
-    }
-
-    private List<LabOrder> mergeDeliveredLists(List<LabOrder> delivered, List<LabOrder> reprintRequired) {
-        Map<Long, LabOrder> merged = new java.util.LinkedHashMap<>();
-        for (LabOrder order : delivered) {
-            merged.put(order.getId(), order);
-        }
-        for (LabOrder order : reprintRequired) {
-            merged.put(order.getId(), order);
-        }
-        return new java.util.ArrayList<>(merged.values());
     }
 
     @FXML

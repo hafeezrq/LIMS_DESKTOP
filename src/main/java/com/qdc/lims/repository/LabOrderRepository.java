@@ -82,6 +82,15 @@ public interface LabOrderRepository extends JpaRepository<LabOrder, Long> {
     List<LabOrder> findByIsReportDeliveredTrueAndDeliveryDateBetween(LocalDateTime start, LocalDateTime end);
 
     /**
+     * Finds orders whose report print progress changed within a date range.
+     *
+     * @param start range start
+     * @param end   range end
+     * @return matching lab orders
+     */
+    List<LabOrder> findByReportProgressUpdatedAtBetween(LocalDateTime start, LocalDateTime end);
+
+    /**
      * Finds orders marked for report reprint.
      *
      * @return list of LabOrders requiring reprint

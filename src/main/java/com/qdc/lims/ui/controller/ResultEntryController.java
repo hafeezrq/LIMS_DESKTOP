@@ -1,26 +1,38 @@
 package com.qdc.lims.ui.controller;
 
-import com.qdc.lims.ui.SessionManager;
 import com.qdc.lims.entity.LabOrder;
 import com.qdc.lims.entity.LabResult;
 import com.qdc.lims.entity.ReferenceRange;
 import com.qdc.lims.entity.TestDefinition;
 import com.qdc.lims.repository.LabOrderRepository;
-import com.qdc.lims.repository.LabResultRepository;
 import com.qdc.lims.repository.ReferenceRangeRepository;
 import com.qdc.lims.service.LocaleFormatService;
 import com.qdc.lims.service.ResultService;
+import com.qdc.lims.util.LabResultDisplayOrder;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
-import javafx.scene.control.*;
+import javafx.scene.Node;
+import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.control.SelectionMode;
+import javafx.scene.control.Tab;
+import javafx.scene.control.TabPane;
+import javafx.scene.control.TableCell;
+import javafx.scene.control.TableColumn;
+import javafx.scene.control.TablePosition;
+import javafx.scene.control.TableView;
+import javafx.scene.control.TextField;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.input.KeyCode;
 import javafx.stage.Stage;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -41,40 +53,31 @@ public class ResultEntryController {
     @FXML
     private Label orderDateLabel;
     @FXML
-    private TableView<LabResult> resultsTable;
-    @FXML
-    private TableColumn<LabResult, String> testNameColumn;
-    @FXML
-    private TableColumn<LabResult, String> resultValueColumn;
-    @FXML
-    private TableColumn<LabResult, String> unitColumn;
-    @FXML
-    private TableColumn<LabResult, String> referenceRangeColumn;
-    @FXML
-    private TableColumn<LabResult, String> statusColumn;
+    private TabPane departmentTabPane;
     @FXML
     private Label messageLabel;
     @FXML
     private Button saveButton;
 
     private final LabOrderRepository orderRepository;
-    private final LabResultRepository resultRepository;
     private final ResultService resultService;
     private final LocaleFormatService localeFormatService;
     private final ReferenceRangeRepository referenceRangeRepository;
     private LabOrder currentOrder;
     private Runnable closeAction;
 
-    // Flag to prevent selection listener loops during programmatic navigation
+    private final List<TableView<LabResult>> resultTables = new ArrayList<>();
+    private final Map<Tab, TableView<LabResult>> categoryTabTableMap = new LinkedHashMap<>();
+    private TableView<LabResult> activeResultsTable;
+
+    // Flag to prevent selection listener loops during programmatic navigation.
     private boolean adjustingSelection = false;
 
     public ResultEntryController(LabOrderRepository orderRepository,
-            LabResultRepository resultRepository,
             ResultService resultService,
             LocaleFormatService localeFormatService,
             ReferenceRangeRepository referenceRangeRepository) {
         this.orderRepository = orderRepository;
-        this.resultRepository = resultRepository;
         this.resultService = resultService;
         this.localeFormatService = localeFormatService;
         this.referenceRangeRepository = referenceRangeRepository;
@@ -94,191 +97,75 @@ public class ResultEntryController {
 
     @FXML
     private void initialize() {
-        setupResultsTable();
+        departmentTabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
+            refreshActiveTableFromSelection();
+        });
         messageLabel.setText("");
     }
 
-    private void setupResultsTable() {
-        resultsTable.setEditable(true);
-        resultsTable.getSelectionModel().setCellSelectionEnabled(true);
-        resultsTable.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
+    private TableView<LabResult> createResultsTable() {
+        TableView<LabResult> table = new TableView<>();
+        table.setEditable(true);
+        table.getSelectionModel().setCellSelectionEnabled(true);
+        table.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
 
-        // Selection Listener: Handles mouse clicks or manual selection changes
-        resultsTable.getSelectionModel().selectedIndexProperty().addListener((obs, oldVal, newVal) -> {
-            if (adjustingSelection || newVal == null || newVal.intValue() < 0) {
-                return;
-            }
-
-            int row = newVal.intValue();
-            Platform.runLater(() -> {
-                if (resultsTable.getEditingCell() == null) {
-                    resultsTable.requestFocus();
-                    // Optional: specifically select the value column
-                    resultsTable.getSelectionModel().select(row, resultValueColumn);
-                    resultsTable.edit(row, resultValueColumn);
-                }
-            });
+        TableColumn<LabResult, String> testNameColumn = new TableColumn<>("Test Name");
+        testNameColumn.setEditable(false);
+        testNameColumn.setPrefWidth(260);
+        testNameColumn.setCellValueFactory(cellData -> {
+            TestDefinition testDefinition = cellData.getValue().getTestDefinition();
+            String testName = testDefinition != null && testDefinition.getTestName() != null
+                    ? testDefinition.getTestName()
+                    : "";
+            return new SimpleStringProperty(testName);
         });
 
-        testNameColumn.setCellValueFactory(
-                cellData -> new SimpleStringProperty(cellData.getValue().getTestDefinition().getTestName()));
-
-        // --- RESULT VALUE COLUMN ---
+        TableColumn<LabResult, String> resultValueColumn = new TableColumn<>("Result Value");
+        resultValueColumn.setPrefWidth(160);
         resultValueColumn.setCellValueFactory(cellData -> {
             LabResult result = cellData.getValue();
             String value = result.getResultValue() != null ? result.getResultValue() : "";
             return new SimpleStringProperty(value);
         });
 
-        resultValueColumn.setCellFactory(column -> new TableCell<LabResult, String>() {
-            private TextField textField;
-
-            @Override
-            public void startEdit() {
-                if (!isEmpty()) {
-                    super.startEdit();
-                    createTextField();
-                    setText(null);
-                    setGraphic(textField);
-                    textField.selectAll();
-                    Platform.runLater(() -> textField.requestFocus());
-                }
-            }
-
-            @Override
-            public void cancelEdit() {
-                super.cancelEdit();
-                setText(getItem());
-                setGraphic(null);
-            }
-
-            @Override
-            public void updateItem(String item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty) {
-                    setText(null);
-                    setGraphic(null);
-                } else {
-                    if (isEditing()) {
-                        if (textField != null) {
-                            textField.setText(getString());
-                        }
-                        setText(null);
-                        setGraphic(textField);
-                    } else {
-                        setText(getString());
-                        setGraphic(null);
-                    }
-                }
-            }
-
-            private void createTextField() {
-                textField = new TextField(getString());
-                textField.setMinWidth(this.getWidth() - this.getGraphicTextGap() * 2);
-
-                textField.setOnKeyPressed(event -> {
-                    if (event.getCode() == KeyCode.ENTER || event.getCode() == KeyCode.TAB
-                            || event.getCode() == KeyCode.DOWN || event.getCode() == KeyCode.UP) {
-
-                        commitEdit(textField.getText());
-
-                        int delta;
-                        if (event.getCode() == KeyCode.UP) {
-                            delta = -1;
-                        } else if (event.getCode() == KeyCode.DOWN) {
-                            delta = 1;
-                        } else {
-                            delta = event.isShiftDown() ? -1 : 1; // Tab/Enter logic
-                        }
-
-                        navigateToRow(delta);
-                        event.consume();
-                    } else if (event.getCode() == KeyCode.ESCAPE) {
-                        cancelEdit();
-                        event.consume();
-                    }
-                });
-
-                // Focus lost: backup save
-                textField.focusedProperty().addListener((obs, wasFocused, isNowFocused) -> {
-                    if (!isNowFocused && isEditing()) {
-                        commitEdit(textField.getText());
-                    }
-                });
-            }
-
-            private String getString() {
-                return getItem() == null ? "" : getItem();
-            }
-
-            private void navigateToRow(int delta) {
-                int currentRow = getTableRow().getIndex();
-                int targetRow = currentRow + delta;
-
-                if (targetRow < 0 || targetRow >= getTableView().getItems().size()) {
-                    return;
-                }
-
-                adjustingSelection = true;
-                Platform.runLater(() -> {
-                    try {
-                        getTableView().requestFocus();
-                        getTableView().getSelectionModel().clearAndSelect(targetRow, getTableColumn());
-                        getTableView().getFocusModel().focus(targetRow, getTableColumn());
-                        getTableView().scrollTo(targetRow);
-
-                        // Small nested delay ensures the commit is fully finished before the next edit
-                        // starts
-                        Platform.runLater(() -> {
-                            getTableView().edit(targetRow, getTableColumn());
-                            adjustingSelection = false;
-                        });
-                    } catch (Exception e) {
-                        adjustingSelection = false;
-                    }
-                });
-            }
+        TableColumn<LabResult, String> unitColumn = new TableColumn<>("Unit");
+        unitColumn.setEditable(false);
+        unitColumn.setPrefWidth(90);
+        unitColumn.setCellValueFactory(cellData -> {
+            TestDefinition testDefinition = cellData.getValue().getTestDefinition();
+            String unit = testDefinition != null && testDefinition.getUnit() != null ? testDefinition.getUnit() : "";
+            return new SimpleStringProperty(unit);
         });
 
-        // Data update handler
-        resultValueColumn.setOnEditCommit(event -> {
-            LabResult result = event.getRowValue();
-            result.setResultValue(event.getNewValue());
-            autoCalculateStatus(result);
-
-            // Toggle visibility to force status column to redraw instantly
-            Platform.runLater(() -> {
-                statusColumn.setVisible(false);
-                statusColumn.setVisible(true);
-            });
-        });
-
-        unitColumn.setCellValueFactory(
-                cellData -> new SimpleStringProperty(cellData.getValue().getTestDefinition().getUnit() != null
-                        ? cellData.getValue().getTestDefinition().getUnit()
-                        : ""));
-
+        TableColumn<LabResult, String> referenceRangeColumn = new TableColumn<>("Reference Range");
+        referenceRangeColumn.setEditable(false);
+        referenceRangeColumn.setPrefWidth(170);
         referenceRangeColumn.setCellValueFactory(cellData -> {
             TestDefinition test = cellData.getValue().getTestDefinition();
             ReferenceRange range = findMatchingRange(test, currentOrder != null ? currentOrder.getPatient() : null);
-            if (range == null)
+            if (range == null) {
                 return new SimpleStringProperty("N/A");
+            }
 
             String min = range.getMinVal() != null ? localeFormatService.formatNumber(range.getMinVal()) : "";
             String max = range.getMaxVal() != null ? localeFormatService.formatNumber(range.getMaxVal()) : "";
 
-            return (min.isEmpty() && max.isEmpty()) ? new SimpleStringProperty("N/A")
+            return (min.isEmpty() && max.isEmpty())
+                    ? new SimpleStringProperty("N/A")
                     : new SimpleStringProperty(min + " - " + max);
         });
 
+        TableColumn<LabResult, String> statusColumn = new TableColumn<>("Status");
+        statusColumn.setEditable(false);
+        statusColumn.setPrefWidth(130);
         statusColumn.setCellValueFactory(cellData -> {
             if (cellData.getValue().isAbnormal()) {
                 return new SimpleStringProperty(cellData.getValue().getRemarks());
             }
             return new SimpleStringProperty("Normal");
         });
-
-        statusColumn.setCellFactory(column -> new TableCell<LabResult, String>() {
+        statusColumn.setCellFactory(column -> new TableCell<>() {
             @Override
             protected void updateItem(String item, boolean empty) {
                 super.updateItem(item, empty);
@@ -294,11 +181,170 @@ public class ResultEntryController {
                 }
             }
         });
+
+        resultValueColumn.setCellFactory(column -> new TableCell<>() {
+            private TextField textField;
+
+            @Override
+            public void startEdit() {
+                if (!isEmpty()) {
+                    super.startEdit();
+                    activeResultsTable = getTableView();
+                    createTextField();
+                    setText(null);
+                    setGraphic(textField);
+                    textField.selectAll();
+                    Platform.runLater(textField::requestFocus);
+                }
+            }
+
+            @Override
+            public void cancelEdit() {
+                super.cancelEdit();
+                setText(currentValue());
+                setGraphic(null);
+            }
+
+            @Override
+            public void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty) {
+                    setText(null);
+                    setGraphic(null);
+                } else if (isEditing()) {
+                    if (textField != null) {
+                        textField.setText(currentValue());
+                    }
+                    setText(null);
+                    setGraphic(textField);
+                } else {
+                    setText(currentValue());
+                    setGraphic(null);
+                }
+            }
+
+            private void createTextField() {
+                textField = new TextField(currentValue());
+                textField.setMinWidth(this.getWidth() - this.getGraphicTextGap() * 2);
+
+                // Keep row model updated even before explicit commit.
+                textField.textProperty().addListener((obs, oldVal, newVal) -> {
+                    LabResult rowItem = getTableRow() != null ? getTableRow().getItem() : null;
+                    if (rowItem != null) {
+                        rowItem.setResultValue(newVal);
+                    }
+                });
+
+                textField.setOnKeyPressed(event -> {
+                    if (event.getCode() == KeyCode.ENTER || event.getCode() == KeyCode.TAB
+                            || event.getCode() == KeyCode.DOWN || event.getCode() == KeyCode.UP) {
+                        commitEdit(textField.getText());
+
+                        int delta;
+                        if (event.getCode() == KeyCode.UP) {
+                            delta = -1;
+                        } else if (event.getCode() == KeyCode.DOWN) {
+                            delta = 1;
+                        } else {
+                            delta = event.isShiftDown() ? -1 : 1;
+                        }
+
+                        navigateToRow(delta);
+                        event.consume();
+                    } else if (event.getCode() == KeyCode.ESCAPE) {
+                        cancelEdit();
+                        event.consume();
+                    }
+                });
+
+                // Focus lost backup save.
+                textField.focusedProperty().addListener((obs, wasFocused, isNowFocused) -> {
+                    if (!isNowFocused && isEditing()) {
+                        commitEdit(textField.getText());
+                    }
+                });
+            }
+
+            private String currentValue() {
+                LabResult rowItem = getTableRow() != null ? getTableRow().getItem() : null;
+                if (rowItem == null || rowItem.getResultValue() == null) {
+                    return "";
+                }
+                return rowItem.getResultValue();
+            }
+
+            private void navigateToRow(int delta) {
+                int currentRow = getTableRow().getIndex();
+                int targetRow = currentRow + delta;
+                TableView<LabResult> currentTable = getTableView();
+
+                if (targetRow < 0 || targetRow >= currentTable.getItems().size()) {
+                    return;
+                }
+
+                adjustingSelection = true;
+                Platform.runLater(() -> {
+                    try {
+                        activeResultsTable = currentTable;
+                        currentTable.requestFocus();
+                        currentTable.getSelectionModel().clearAndSelect(targetRow, resultValueColumn);
+                        currentTable.getFocusModel().focus(targetRow, resultValueColumn);
+                        currentTable.scrollTo(targetRow);
+
+                        Platform.runLater(() -> {
+                            currentTable.edit(targetRow, resultValueColumn);
+                            adjustingSelection = false;
+                        });
+                    } catch (Exception e) {
+                        adjustingSelection = false;
+                    }
+                });
+            }
+        });
+
+        resultValueColumn.setOnEditCommit(event -> {
+            LabResult result = event.getRowValue();
+            result.setResultValue(event.getNewValue());
+            autoCalculateStatus(result);
+            Platform.runLater(table::refresh);
+        });
+
+        table.getSelectionModel().selectedIndexProperty().addListener((obs, oldVal, newVal) -> {
+            if (adjustingSelection || newVal == null || newVal.intValue() < 0) {
+                return;
+            }
+
+            int row = newVal.intValue();
+            activeResultsTable = table;
+            Platform.runLater(() -> {
+                if (table.getEditingCell() == null) {
+                    table.requestFocus();
+                    table.getSelectionModel().select(row, resultValueColumn);
+                    table.edit(row, resultValueColumn);
+                }
+            });
+        });
+
+        table.focusedProperty().addListener((obs, wasFocused, isNowFocused) -> {
+            if (isNowFocused) {
+                activeResultsTable = table;
+            }
+        });
+        table.setOnMousePressed(event -> activeResultsTable = table);
+
+        table.getColumns().addAll(List.of(
+                testNameColumn,
+                resultValueColumn,
+                unitColumn,
+                referenceRangeColumn,
+                statusColumn));
+        return table;
     }
 
     private void loadOrderData() {
-        if (currentOrder == null)
+        if (currentOrder == null) {
             return;
+        }
 
         currentOrder = orderRepository.findById(currentOrder.getId())
                 .orElseThrow(() -> new RuntimeException("Order not found"));
@@ -307,30 +353,143 @@ public class ResultEntryController {
 
         orderInfoLabel.setText("Order #" + currentOrder.getId()
                 + (isEditMode ? " - EDITING COMPLETED" : " - Status: " + currentOrder.getStatus()));
-        if (saveButton != null)
+        if (saveButton != null) {
             saveButton.setText(isEditMode ? "Save Corrections" : "Save Results");
+        }
 
         mrnLabel.setText(currentOrder.getPatient().getMrn());
         nameLabel.setText(currentOrder.getPatient().getFullName());
         ageGenderLabel.setText(currentOrder.getPatient().getAge() + " / " + currentOrder.getPatient().getGender());
         orderDateLabel.setText(localeFormatService.formatDateTime(currentOrder.getOrderDate()));
 
-        resultsTable.setItems(FXCollections.observableArrayList(currentOrder.getResults()));
+        List<LabResult> sortedResults = currentOrder.getResults() == null
+                ? List.of()
+                : currentOrder.getResults().stream()
+                        .sorted(LabResultDisplayOrder.comparator())
+                        .toList();
 
-        // Initial Focus
-        Platform.runLater(() -> {
-            if (!resultsTable.getItems().isEmpty()) {
-                resultsTable.requestFocus();
-                resultsTable.getSelectionModel().select(0, resultValueColumn);
-                resultsTable.edit(0, resultValueColumn);
+        buildDepartmentTabs(sortedResults);
+        Platform.runLater(this::focusFirstResultCell);
+    }
+
+    private void buildDepartmentTabs(List<LabResult> sortedResults) {
+        resultTables.clear();
+        categoryTabTableMap.clear();
+        activeResultsTable = null;
+        departmentTabPane.getTabs().clear();
+
+        Map<String, Map<String, List<LabResult>>> grouped = new LinkedHashMap<>();
+        for (LabResult result : sortedResults) {
+            String departmentName = getDepartmentName(result);
+            String categoryName = getCategoryName(result);
+            grouped.computeIfAbsent(departmentName, key -> new LinkedHashMap<>())
+                    .computeIfAbsent(categoryName, key -> new ArrayList<>())
+                    .add(result);
+        }
+
+        for (Map.Entry<String, Map<String, List<LabResult>>> departmentEntry : grouped.entrySet()) {
+            TabPane categoryTabPane = new TabPane();
+            categoryTabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+
+            for (Map.Entry<String, List<LabResult>> categoryEntry : departmentEntry.getValue().entrySet()) {
+                TableView<LabResult> table = createResultsTable();
+                table.setItems(FXCollections.observableArrayList(categoryEntry.getValue()));
+                resultTables.add(table);
+
+                Tab categoryTab = new Tab(categoryEntry.getKey(), table);
+                categoryTab.setClosable(false);
+                categoryTabTableMap.put(categoryTab, table);
+                categoryTabPane.getTabs().add(categoryTab);
             }
-        });
+
+            categoryTabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
+                refreshActiveTableFromSelection();
+            });
+
+            Tab departmentTab = new Tab(departmentEntry.getKey(), categoryTabPane);
+            departmentTab.setClosable(false);
+            departmentTabPane.getTabs().add(departmentTab);
+        }
+    }
+
+    private void focusFirstResultCell() {
+        if (resultTables.isEmpty()) {
+            return;
+        }
+
+        if (departmentTabPane.getTabs().isEmpty()) {
+            return;
+        }
+
+        departmentTabPane.getSelectionModel().select(0);
+        Tab selectedDepartmentTab = departmentTabPane.getSelectionModel().getSelectedItem();
+        if (selectedDepartmentTab != null && selectedDepartmentTab.getContent() instanceof TabPane categoryTabPane) {
+            if (!categoryTabPane.getTabs().isEmpty()) {
+                categoryTabPane.getSelectionModel().select(0);
+            }
+        }
+
+        TableView<LabResult> firstTable = resultTables.get(0);
+        activeResultsTable = firstTable;
+        if (!firstTable.getItems().isEmpty()) {
+            firstTable.requestFocus();
+            TableColumn<LabResult, ?> valueColumn = firstTable.getColumns().size() > 1 ? firstTable.getColumns().get(1)
+                    : null;
+            if (valueColumn != null) {
+                firstTable.getSelectionModel().select(0, valueColumn);
+                firstTable.edit(0, valueColumn);
+            }
+        }
+    }
+
+    private void refreshActiveTableFromSelection() {
+        Tab selectedDepartmentTab = departmentTabPane.getSelectionModel().getSelectedItem();
+        if (selectedDepartmentTab == null || !(selectedDepartmentTab.getContent() instanceof TabPane categoryTabPane)) {
+            return;
+        }
+
+        Tab selectedCategoryTab = categoryTabPane.getSelectionModel().getSelectedItem();
+        if (selectedCategoryTab != null) {
+            TableView<LabResult> table = categoryTabTableMap.get(selectedCategoryTab);
+            if (table != null) {
+                activeResultsTable = table;
+            }
+        }
+    }
+
+    private List<LabResult> collectAllResults() {
+        List<LabResult> allResults = new ArrayList<>();
+        for (TableView<LabResult> table : resultTables) {
+            allResults.addAll(table.getItems());
+        }
+        return allResults;
+    }
+
+    private String getDepartmentName(LabResult result) {
+        if (result == null || result.getTestDefinition() == null
+                || result.getTestDefinition().getDepartment() == null
+                || result.getTestDefinition().getDepartment().getName() == null
+                || result.getTestDefinition().getDepartment().getName().isBlank()) {
+            return "Other";
+        }
+        return result.getTestDefinition().getDepartment().getName();
+    }
+
+    private String getCategoryName(LabResult result) {
+        if (result == null || result.getTestDefinition() == null
+                || result.getTestDefinition().getCategory() == null
+                || result.getTestDefinition().getCategory().getName() == null
+                || result.getTestDefinition().getCategory().getName().isBlank()) {
+            return "Other Tests";
+        }
+        return result.getTestDefinition().getCategory().getName();
     }
 
     private void autoCalculateStatus(LabResult result) {
         String value = result.getResultValue();
-        if (value == null || value.trim().isEmpty())
+        if (value == null || value.trim().isEmpty()) {
             return;
+        }
 
         try {
             java.math.BigDecimal numValue = new java.math.BigDecimal(value.trim());
@@ -356,11 +515,13 @@ public class ResultEntryController {
     }
 
     private ReferenceRange findMatchingRange(TestDefinition test, com.qdc.lims.entity.Patient patient) {
-        if (test == null || test.getId() == null)
+        if (test == null || test.getId() == null) {
             return null;
+        }
         var ranges = referenceRangeRepository.findByTestId(test.getId());
-        if (ranges == null || ranges.isEmpty())
+        if (ranges == null || ranges.isEmpty()) {
             return null;
+        }
 
         Integer age = patient != null ? patient.getAge() : null;
         String gender = patient != null ? patient.getGender() : null;
@@ -373,41 +534,49 @@ public class ResultEntryController {
     }
 
     private boolean matchesRange(ReferenceRange range, Integer age, String gender) {
-        if (range == null)
+        if (range == null) {
             return false;
+        }
         String rangeGender = range.getGender();
         if (gender != null && rangeGender != null && !"Both".equalsIgnoreCase(rangeGender)
-                && !rangeGender.equalsIgnoreCase(gender))
+                && !rangeGender.equalsIgnoreCase(gender)) {
             return false;
+        }
         if (age != null) {
-            if (range.getMinAge() != null && age < range.getMinAge())
+            if (range.getMinAge() != null && age < range.getMinAge()) {
                 return false;
-            if (range.getMaxAge() != null && age > range.getMaxAge())
+            }
+            if (range.getMaxAge() != null && age > range.getMaxAge()) {
                 return false;
+            }
         }
         return true;
     }
 
     private int genderScore(ReferenceRange range, String gender) {
-        if (range == null)
+        if (range == null) {
             return 0;
+        }
         String rg = range.getGender();
-        if (gender != null && rg != null && rg.equalsIgnoreCase(gender))
+        if (gender != null && rg != null && rg.equalsIgnoreCase(gender)) {
             return 2;
-        if (rg != null && "Both".equalsIgnoreCase(rg))
+        }
+        if (rg != null && "Both".equalsIgnoreCase(rg)) {
             return 1;
+        }
         return 0;
     }
 
     @FXML
     private void handleSaveResults() {
         try {
-            resultsTable.refresh();
-            String currentUser = SessionManager.getCurrentUser() != null ? SessionManager.getCurrentUser().getUsername()
-                    : "UNKNOWN";
+            commitActiveEdit();
+            resultTables.forEach(TableView::refresh);
 
-            int enteredCount = (int) resultsTable.getItems().stream()
-                    .filter(r -> r.getResultValue() != null && !r.getResultValue().trim().isEmpty()).count();
+            List<LabResult> allResults = collectAllResults();
+            int enteredCount = (int) allResults.stream()
+                    .filter(r -> r.getResultValue() != null && !r.getResultValue().trim().isEmpty())
+                    .count();
 
             if (enteredCount == 0) {
                 showError("No results to save.");
@@ -428,19 +597,11 @@ public class ResultEntryController {
                     showError("Edit reason is required.");
                     return;
                 }
-                currentOrder.setResults(new ArrayList<>(resultsTable.getItems()));
+                currentOrder.setResults(new ArrayList<>(allResults));
                 resultService.saveEditedResults(currentOrder, editReason);
                 showSuccess("Results corrected!");
             } else {
-                // Pending Logic
-                for (LabResult result : resultsTable.getItems()) {
-                    if (result.getResultValue() != null && !result.getResultValue().trim().isEmpty()) {
-                        result.setPerformedBy(currentUser);
-                        result.setPerformedAt(LocalDateTime.now());
-                        resultRepository.save(result);
-                    }
-                }
-                currentOrder.setResults(new ArrayList<>(resultsTable.getItems()));
+                currentOrder.setResults(new ArrayList<>(allResults));
                 resultService.saveResultsFromForm(currentOrder);
                 showSuccess("Results saved!");
             }
@@ -462,8 +623,14 @@ public class ResultEntryController {
             closeAction.run();
             return;
         }
-        Stage stage = (Stage) resultsTable.getScene().getWindow();
-        stage.close();
+        Node anchor = saveButton != null ? saveButton : departmentTabPane;
+        if (anchor == null || anchor.getScene() == null) {
+            return;
+        }
+        Stage stage = (Stage) anchor.getScene().getWindow();
+        if (stage != null) {
+            stage.close();
+        }
     }
 
     private void showError(String message) {
@@ -474,5 +641,52 @@ public class ResultEntryController {
     private void showSuccess(String message) {
         messageLabel.setText("✓ " + message);
         messageLabel.setStyle("-fx-text-fill: #27ae60; -fx-font-weight: bold;");
+    }
+
+    private void commitActiveEdit() {
+        TableView<LabResult> table = resolveTableForCommit();
+        if (table == null) {
+            return;
+        }
+
+        TablePosition<LabResult, ?> editingCell = table.getEditingCell();
+        if (editingCell == null) {
+            return;
+        }
+
+        int row = editingCell.getRow();
+        if (row < 0 || row >= table.getItems().size()) {
+            return;
+        }
+
+        LabResult editingResult = table.getItems().get(row);
+        String latestValue = editingResult.getResultValue();
+
+        if (table.getScene() != null) {
+            Node focusOwner = table.getScene().getFocusOwner();
+            if (focusOwner instanceof TextField textField) {
+                latestValue = textField.getText();
+            }
+        }
+
+        editingResult.setResultValue(latestValue);
+        autoCalculateStatus(editingResult);
+        table.edit(-1, null);
+        table.refresh();
+    }
+
+    private TableView<LabResult> resolveTableForCommit() {
+        if (activeResultsTable != null) {
+            return activeResultsTable;
+        }
+        for (TableView<LabResult> table : resultTables) {
+            if (table.getEditingCell() != null) {
+                return table;
+            }
+        }
+        if (!resultTables.isEmpty()) {
+            return resultTables.get(0);
+        }
+        return null;
     }
 }

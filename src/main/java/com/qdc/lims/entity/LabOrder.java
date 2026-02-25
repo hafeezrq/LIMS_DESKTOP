@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
+import com.qdc.lims.util.ReportPrintState;
 import org.hibernate.Hibernate;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -47,6 +48,15 @@ public class LabOrder {
     private boolean isReportDelivered = false; // False = In Lab/Rack, True = With Patient
 
     private LocalDateTime deliveryDate; // When was it handed over?
+
+    @Column(nullable = false, length = 32, columnDefinition = "varchar(32) default 'NOT_PRINTED'")
+    private String reportPrintState = ReportPrintState.NOT_PRINTED;
+    @Column(nullable = false, columnDefinition = "integer default 0")
+    private Integer printedDepartmentCount = 0;
+    @Column(nullable = false, columnDefinition = "integer default 0")
+    private Integer totalDepartmentCount = 0;
+    private LocalDateTime reportProgressUpdatedAt;
+    private String reportProgressUpdatedBy;
 
     // --- RESULT EDIT / REPRINT AUDIT ---
     @Column(nullable = false, columnDefinition = "boolean default false")
@@ -96,6 +106,15 @@ public class LabOrder {
     protected void onCreate() {
         this.orderDate = LocalDateTime.now();
         this.status = "PENDING";
+        if (this.reportPrintState == null || this.reportPrintState.isBlank()) {
+            this.reportPrintState = ReportPrintState.NOT_PRINTED;
+        }
+        if (this.printedDepartmentCount == null) {
+            this.printedDepartmentCount = 0;
+        }
+        if (this.totalDepartmentCount == null) {
+            this.totalDepartmentCount = 0;
+        }
     }
 
     /**

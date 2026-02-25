@@ -169,11 +169,12 @@
                             </HBox>
                             <TableView fx:id="deliveredOrdersTable" VBox.vgrow="ALWAYS">
                                 <columns>
-                                    <TableColumn fx:id="deliveredOrderIdCol" text="Order #" prefWidth="80"/>
-                                    <TableColumn fx:id="deliveredMrnCol" text="MRN" prefWidth="100"/>
-                                    <TableColumn fx:id="deliveredPatientCol" text="Patient Name" prefWidth="180"/>
-                                    <TableColumn fx:id="deliveredOrderDateCol" text="Order Date" prefWidth="130"/>
-                                    <TableColumn fx:id="deliveredDeliveryDateCol" text="Delivered On" prefWidth="130"/>
+                                    <TableColumn fx:id="deliveredOrderIdCol" text="Order #" prefWidth="75"/>
+                                    <TableColumn fx:id="deliveredMrnCol" text="MRN" prefWidth="90"/>
+                                    <TableColumn fx:id="deliveredPatientCol" text="Patient Name" prefWidth="170"/>
+                                    <TableColumn fx:id="deliveredOrderDateCol" text="Order Date" prefWidth="120"/>
+                                    <TableColumn fx:id="deliveredDeliveryDateCol" text="Activity On" prefWidth="130"/>
+                                    <TableColumn fx:id="deliveredReportStatusCol" text="Report Status" prefWidth="180"/>
                                     <TableColumn fx:id="deliveredActionCol" text="Action" prefWidth="110"/>
                                 </columns>
                                 <placeholder>

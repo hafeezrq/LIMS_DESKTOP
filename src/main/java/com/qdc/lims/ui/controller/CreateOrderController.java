@@ -93,6 +93,7 @@ public class CreateOrderController {
     private final Map<Integer, List<TestDefinition>> panelTestsMap = new HashMap<>();
     private final Map<Long, Set<Integer>> testPanelMembership = new HashMap<>();
     private boolean bulkSelection = false;
+    private boolean suppressPanelDeselectCascade = false;
 
     private ObservableList<String> selectedTestNames = FXCollections.observableArrayList();
 
@@ -279,27 +280,29 @@ public class CreateOrderController {
                         bulkSelection = false;
                     } else {
                         selectedPanelIds.remove(panel.getId());
-                        bulkSelection = true;
-                        for (TestDefinition test : panelTests) {
-                            if (test.getId() == null) {
-                                continue;
-                            }
-                            Set<Integer> memberships = testPanelMembership.get(test.getId());
-                            boolean selectedInAnotherPanel = memberships != null
-                                    && memberships.stream()
-                                            .filter(memberPanelId -> !memberPanelId.equals(panel.getId()))
-                                            .map(panelCheckboxMap::get)
-                                            .anyMatch(cb -> cb != null && cb.isSelected());
-                            if (selectedInAnotherPanel) {
-                                continue;
-                            }
+                        if (!suppressPanelDeselectCascade) {
+                            bulkSelection = true;
+                            for (TestDefinition test : panelTests) {
+                                if (test.getId() == null) {
+                                    continue;
+                                }
+                                Set<Integer> memberships = testPanelMembership.get(test.getId());
+                                boolean selectedInAnotherPanel = memberships != null
+                                        && memberships.stream()
+                                                .filter(memberPanelId -> !memberPanelId.equals(panel.getId()))
+                                                .map(panelCheckboxMap::get)
+                                                .anyMatch(cb -> cb != null && cb.isSelected());
+                                if (selectedInAnotherPanel) {
+                                    continue;
+                                }
 
-                            CheckBox testCheckBox = testCheckboxMap.get(test.getId());
-                            if (testCheckBox != null) {
-                                testCheckBox.setSelected(false);
+                                CheckBox testCheckBox = testCheckboxMap.get(test.getId());
+                                if (testCheckBox != null) {
+                                    testCheckBox.setSelected(false);
+                                }
                             }
+                            bulkSelection = false;
                         }
-                        bulkSelection = false;
                     }
                     updateTotalAmount();
                     updateSelectedTestsListView();
@@ -413,7 +416,12 @@ public class CreateOrderController {
                     for (Integer panelId : panels) {
                         CheckBox panelCheckBox = panelCheckboxMap.get(panelId);
                         if (panelCheckBox != null && panelCheckBox.isSelected()) {
-                            panelCheckBox.setSelected(false);
+                            suppressPanelDeselectCascade = true;
+                            try {
+                                panelCheckBox.setSelected(false);
+                            } finally {
+                                suppressPanelDeselectCascade = false;
+                            }
                         }
                     }
                 }

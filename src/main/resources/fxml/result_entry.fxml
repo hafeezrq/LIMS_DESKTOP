@@ -45,15 +45,7 @@
                     <Label text="Test Results" style="-fx-font-size: 16; -fx-font-weight: bold;"/>
                     <Separator/>
                     
-                    <TableView fx:id="resultsTable" VBox.vgrow="ALWAYS" editable="true">
-                        <columns>
-                            <TableColumn fx:id="testNameColumn" text="Test Name" prefWidth="250" editable="false"/>
-                            <TableColumn fx:id="resultValueColumn" text="Result Value" prefWidth="150"/>
-                            <TableColumn fx:id="unitColumn" text="Unit" prefWidth="80" editable="false"/>
-                            <TableColumn fx:id="referenceRangeColumn" text="Reference Range" prefWidth="150" editable="false"/>
-                            <TableColumn fx:id="statusColumn" text="Status" prefWidth="120" editable="false"/>
-                        </columns>
-                    </TableView>
+                    <TabPane fx:id="departmentTabPane" VBox.vgrow="ALWAYS" tabClosingPolicy="UNAVAILABLE"/>
                     
                     <HBox spacing="10" style="-fx-background-color: #ecf0f1; -fx-padding: 10; -fx-background-radius: 5;">
                         <Label text="💡 Tip:" style="-fx-font-weight: bold;"/>
