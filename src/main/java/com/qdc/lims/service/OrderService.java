@@ -76,7 +76,6 @@ public class OrderService {
 
         BigDecimal totalAmount = BigDecimal.ZERO;
 
-        // --- NEW LOGIC: Expand panels to tests ---
         List<Long> testIds = request.testIds() != null ? request.testIds() : List.of();
         List<Integer> panelIds = request.panelIds() != null ? request.panelIds() : List.of();
 
@@ -119,8 +118,15 @@ public class OrderService {
         }
 
         for (TestDefinition test : individualTests) {
-            if (!panelTestIds.contains(test.getId()) && test.getPrice() != null) {
-                totalAmount = totalAmount.add(test.getPrice());
+            if (!panelTestIds.contains(test.getId())) {
+                BigDecimal priceToCharge;
+                // Check if a manual price was sent for this test (ECG, X-Ray, etc.)
+                if (request.manualPrices() != null && request.manualPrices().containsKey(test.getId())) {
+                    priceToCharge = request.manualPrices().get(test.getId());
+                } else {
+                    priceToCharge = test.getPrice() != null ? test.getPrice() : BigDecimal.ZERO;
+                }
+                totalAmount = totalAmount.add(priceToCharge);
             }
         }
 
@@ -129,8 +135,16 @@ public class OrderService {
             LabResult result = new LabResult();
             result.setLabOrder(order);
             result.setTestDefinition(test);
-            result.setResultValue(""); // Waiting for Lab Tech
-            result.setStatus("PENDING");
+
+            // --- UPDATED WORKLIST LOGIC ---
+            if (Boolean.TRUE.equals(test.getSkipWorklist())) {
+                result.setStatus("COMPLETED");
+                result.setResultValue("PROCEDURAL"); // Placeholder for non-lab tests
+            } else {
+                result.setResultValue(""); // Waiting for Lab Tech
+                result.setStatus("PENDING");
+            }
+
             order.getResults().add(result);
 
             // C. INVENTORY LOGIC (Automatic Deduction)
@@ -164,6 +178,20 @@ public class OrderService {
                 // Save updated stock
                 inventoryRepo.save(item);
             }
+        }
+
+        // STEP B: DECIDE THE ORDER STATUS (DO THIS OUTSIDE THE LOOP)
+        // Check the entire merged list of tests
+        boolean hasLabWork = allTests.stream()
+                .anyMatch(t -> !Boolean.TRUE.equals(t.getSkipWorklist()));
+
+        // DEBUG: Add this line to your console so you can see what is happening!
+        System.out.println("Order Creation - Has Lab Work: " + hasLabWork);
+
+        if (hasLabWork) {
+            order.setStatus("PENDING");
+        } else {
+            order.setStatus("COMPLETED");
         }
 
         // --- NEW FINANCE LOGIC ---

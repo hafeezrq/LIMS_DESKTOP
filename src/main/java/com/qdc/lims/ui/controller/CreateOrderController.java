@@ -25,6 +25,7 @@ import javafx.stage.Stage;
 import javafx.util.StringConverter;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -85,6 +86,8 @@ public class CreateOrderController {
     // Map to track selected tests across all categories
     private final Map<Long, CheckBox> testCheckboxMap = new HashMap<>();
     private final Set<TestDefinition> selectedTests = new HashSet<>();
+    // NEW: Map to store manually entered prices for ECG, X-Ray, etc.
+    private final Map<Long, BigDecimal> manualPriceMap = new HashMap<>();
 
     // Map to track selected panels
     private final Map<Integer, CheckBox> panelCheckboxMap = new HashMap<>();
@@ -216,6 +219,7 @@ public class CreateOrderController {
         panelsById.clear();
         panelTestsMap.clear();
         testPanelMembership.clear();
+        manualPriceMap.clear();
 
         for (Panel panel : allPanels) {
             panelsById.put(panel.getId(), panel);
@@ -409,8 +413,14 @@ public class CreateOrderController {
         checkBox.selectedProperty().addListener((obs, wasSelected, isSelected) -> {
             if (isSelected) {
                 selectedTests.add(test);
+                // NEW: Trigger manual price prompt if flag is set
+                if (Boolean.TRUE.equals(test.getManualPriceRequired())) {
+                    promptForManualPrice(test, checkBox);
+                }
+
             } else {
                 selectedTests.remove(test);
+                manualPriceMap.remove(test.getId());
                 Set<Integer> panels = testPanelMembership.get(test.getId());
                 if (panels != null) {
                     for (Integer panelId : panels) {
@@ -438,6 +448,30 @@ public class CreateOrderController {
             testCheckboxMap.put(test.getId(), checkBox);
         }
         return checkBox;
+    }
+
+    private void promptForManualPrice(TestDefinition test, CheckBox checkBox) {
+        TextInputDialog dialog = new TextInputDialog(test.getPrice() != null ? test.getPrice().toString() : "0");
+        dialog.setTitle("Price Entry Required");
+        dialog.setHeaderText("Enter price for " + test.getTestName());
+        dialog.setContentText("Amount:");
+
+        Optional<String> result = dialog.showAndWait();
+        if (result.isPresent()) {
+            try {
+                BigDecimal enteredPrice = new BigDecimal(result.get());
+                manualPriceMap.put(test.getId(), enteredPrice);
+            } catch (NumberFormatException e) {
+                showError("Invalid amount. Setting to 0.");
+                manualPriceMap.put(test.getId(), BigDecimal.ZERO);
+            }
+        } else {
+            // If user cancels, unselect the checkbox
+            bulkSelection = true;
+            checkBox.setSelected(false);
+            selectedTests.remove(test);
+            bulkSelection = false;
+        }
     }
 
     private String categoryName(TestDefinition test) {
@@ -528,11 +562,18 @@ public class CreateOrderController {
             }
         }
 
+        // 2. Individual Tests
         for (TestDefinition test : selectedTests) {
-            if (!panelTestIds.contains(test.getId()) && test.getPrice() != null) {
-                total = total.add(test.getPrice());
+            if (!panelTestIds.contains(test.getId())) {
+                // NEW: Check manual map first, otherwise use default test price
+                if (manualPriceMap.containsKey(test.getId())) {
+                    total = total.add(manualPriceMap.get(test.getId()));
+                } else if (test.getPrice() != null) {
+                    total = total.add(test.getPrice());
+                }
             }
         }
+
         return total;
     }
 
@@ -603,7 +644,8 @@ public class CreateOrderController {
                 testIds,
                 panelIds,
                 discount,
-                cashPaid);
+                cashPaid,
+                new HashMap<>(manualPriceMap));
 
         // Create order
         try {

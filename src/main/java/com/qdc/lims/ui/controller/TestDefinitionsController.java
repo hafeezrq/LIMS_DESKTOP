@@ -46,6 +46,15 @@ public class TestDefinitionsController {
     private TableColumn<TestDefinition, String> colUnit;
     @FXML
     private TableColumn<TestDefinition, BigDecimal> colPrice;
+
+    // NEW COLUMNS
+    @FXML
+    private TableColumn<TestDefinition, Boolean> colManualPrice;
+    @FXML
+    private TableColumn<TestDefinition, Boolean> colSkipWorklist;
+    @FXML
+    private TableColumn<TestDefinition, Boolean> colActive;
+
     @FXML
     private TableColumn<TestDefinition, Void> colActions;
     @FXML
@@ -75,8 +84,58 @@ public class TestDefinitionsController {
         });
         colUnit.setCellValueFactory(cellData -> new SimpleObjectProperty<>(
                 cellData.getValue().getUnit() != null ? cellData.getValue().getUnit() : ""));
+
+        // --- NEW: ACTIVE STATUS COLUMN ---
+        colActive.setCellFactory(tc -> new TableCell<>() {
+            @Override
+            protected void updateItem(Boolean item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setStyle("");
+                } else {
+                    if (item) {
+                        setText("ACTIVE");
+                        setStyle(
+                                "-fx-text-fill: white; -fx-background-color: #27ae60; -fx-alignment: center; -fx-background-radius: 3; -fx-padding: 2;");
+                    } else {
+                        setText("INACTIVE");
+                        setStyle(
+                                "-fx-text-fill: white; -fx-background-color: #e74c3c; -fx-alignment: center; -fx-background-radius: 3; -fx-padding: 2;");
+                    }
+                }
+            }
+        });
+
+        // --- NEW: SETUP FORMATTING FOR NEW COLUMNS ---
+        setupBooleanColumn(colManualPrice);
+        setupBooleanColumn(colSkipWorklist);
+
         setupActionsColumn();
         loadTests();
+    }
+
+    /**
+     * Helper to show "Yes" in green/orange and "No" in grey for the new flags.
+     */
+    private void setupBooleanColumn(TableColumn<TestDefinition, Boolean> column) {
+        column.setCellFactory(tc -> new TableCell<>() {
+            @Override
+            protected void updateItem(Boolean item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setStyle("");
+                } else {
+                    setText(item ? "YES" : "No");
+                    if (item) {
+                        setStyle("-fx-text-fill: #27ae60; -fx-font-weight: bold;");
+                    } else {
+                        setStyle("-fx-text-fill: #95a5a6;");
+                    }
+                }
+            }
+        });
     }
 
     /**
@@ -284,6 +343,14 @@ public class TestDefinitionsController {
         });
         TextField price = new TextField(test.getPrice() != null ? test.getPrice().toPlainString() : "");
         TextField unit = new TextField(test.getUnit());
+        // --- NEW CONTROLS ---
+        CheckBox manualPriceCb = new CheckBox("Requires Manual Price entry (ECG/X-Ray)");
+        manualPriceCb.setSelected(test.getManualPriceRequired() != null && test.getManualPriceRequired());
+
+        CheckBox skipWorklistCb = new CheckBox("Skip Lab Worklist (Direct to Results)");
+        skipWorklistCb.setSelected(test.getSkipWorklist() != null && test.getSkipWorklist());
+        CheckBox activeCb = new CheckBox("Active (Visible in Order Entry)");
+        activeCb.setSelected(test.getActive() != null ? test.getActive() : true);
 
         grid.add(new Label("Test Name:"), 0, 0);
         grid.add(name, 1, 0);
@@ -297,6 +364,8 @@ public class TestDefinitionsController {
         grid.add(unit, 1, 4);
         grid.add(new Label("Price:"), 0, 5);
         grid.add(price, 1, 5);
+        grid.add(new Label("Status:"), 0, 8);
+        grid.add(activeCb, 1, 8);
 
         dialog.getDialogPane().setContent(grid);
 
@@ -323,7 +392,8 @@ public class TestDefinitionsController {
                 TestCategory resolvedCategory = testDefinitionService.findOrCreateCategory(categoryName, selectedDept);
                 test.setCategory(resolvedCategory);
                 test.setUnit(unit.getText() != null ? unit.getText().trim() : null);
-                test.setActive(true);
+                // test.setActive(true);
+                test.setActive(activeCb.isSelected());
                 try {
                     String trimmedPrice = price.getText() != null ? price.getText().trim() : "";
                     if (!trimmedPrice.isEmpty()) {

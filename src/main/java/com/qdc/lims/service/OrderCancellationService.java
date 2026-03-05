@@ -101,7 +101,17 @@ public class OrderCancellationService {
         if (order == null || order.getId() == null) {
             return false;
         }
-        if (!"PENDING".equals(order.getStatus())) {
+        // if (!"PENDING".equals(order.getStatus())) {
+        // return false;
+        // }
+        // NEW: Allow cancellation if status is PENDING or COMPLETED
+        // But block if the report has already been delivered to the patient
+        if (order.getDeliveryDate() != null || order.isReportDelivered()) {
+            return false;
+        }
+
+        String status = order.getStatus();
+        if (!"PENDING".equals(status) && !"COMPLETED".equals(status)) {
             return false;
         }
         return !hasLabWorkStarted(order);
@@ -212,14 +222,23 @@ public class OrderCancellationService {
         if (order.getResults() == null) {
             return false;
         }
-        return order.getResults().stream().anyMatch(this::hasResultActivity);
+        // Only count activity if it's on a test that is NOT a procedural/skip-worklist
+        // test
+        return order.getResults().stream()
+                .filter(result -> result.getTestDefinition() != null
+                        && !Boolean.TRUE.equals(result.getTestDefinition().getSkipWorklist()))
+                .anyMatch(this::hasResultActivity);
     }
 
     private boolean hasResultActivity(LabResult result) {
         if (result == null) {
             return false;
         }
-        return hasText(result.getResultValue())
+        String val = result.getResultValue();
+        // Work has started only if there is text AND that text is NOT our placeholder
+        boolean hasRealValue = hasText(val) && !"PROCEDURAL".equalsIgnoreCase(val.trim());
+
+        return hasRealValue
                 || hasText(result.getPerformedBy())
                 || result.getPerformedAt() != null;
     }

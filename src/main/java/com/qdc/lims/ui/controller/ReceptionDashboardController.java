@@ -252,7 +252,8 @@ public class ReceptionDashboardController {
                             .collect(Collectors.toList());
 
                     long newReadyCount = allOrders.stream()
-                            .filter(o -> "COMPLETED".equals(o.getStatus()) && reportPrintProgressService.isReadySectionState(o))
+                            .filter(o -> "COMPLETED".equals(o.getStatus())
+                                    && reportPrintProgressService.isReadySectionState(o))
                             .count();
 
                     long newPendingCount = allOrders.stream()
@@ -351,24 +352,72 @@ public class ReceptionDashboardController {
         });
 
         readyActionCol.setCellFactory(col -> new TableCell<LabOrder, Void>() {
-            private final Button deliverBtn = new Button("Deliver");
+            private final Button openBtn = new Button("Open");
             {
-                deliverBtn.setStyle(
-                        "-fx-background-color: #27ae60; -fx-text-fill: white; -fx-font-size: 11; -fx-padding: 3 10;");
-                deliverBtn.setOnAction(e -> {
-                    LabOrder order = getTableView().getItems().get(getIndex());
-                    deliverReport(order);
-                });
+                openBtn.setStyle(
+                        "-fx-background-color: #3498db; -fx-text-fill: white; -fx-font-size: 11; -fx-padding: 3 15;");
+                openBtn.setOnAction(e -> handleManageReadyOrder(getTableView().getItems().get(getIndex())));
             }
 
             @Override
             protected void updateItem(Void item, boolean empty) {
                 super.updateItem(item, empty);
-                setGraphic(empty ? null : deliverBtn);
+                setGraphic(empty ? null : openBtn);
             }
         });
 
         readyOrdersTable.setItems(readyOrders);
+    }
+
+    // When user clicks "Open" on a ready order, show a dialog with order details
+    // and actions
+    private void handleManageReadyOrder(LabOrder order) {
+        // Create a custom dialog
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Manage Order #" + order.getId());
+        dialog.setHeaderText("Order Details: " + order.getPatient().getFullName());
+
+        VBox content = new VBox(10);
+        content.setPadding(new Insets(20));
+        content.setPrefWidth(450);
+
+        // 1. Show Test List
+        content.getChildren().add(new Label("Ordered Items:"));
+        for (LabResult res : order.getResults()) {
+            String note = Boolean.TRUE.equals(res.getTestDefinition().getSkipWorklist()) ? "[Procedural]"
+                    : "[Lab Test]";
+            content.getChildren().add(new Label(" • " + res.getTestDefinition().getTestName() + " " + note));
+        }
+
+        // 2. Show Payment Status
+        content.getChildren().add(new Separator());
+        BigDecimal balance = order.getBalanceDue() != null ? order.getBalanceDue() : BigDecimal.ZERO;
+        Label billLabel = new Label("Balance Due: " + localeFormatService.formatCurrency(balance));
+        if (balance.compareTo(BigDecimal.ZERO) > 0)
+            billLabel.setStyle("-fx-text-fill: #e74c3c; -fx-font-weight: bold;");
+        content.getChildren().add(billLabel);
+
+        dialog.getDialogPane().setContent(content);
+
+        // 3. Add Actions
+        ButtonType deliverBtn = new ButtonType("Deliver / Print", ButtonBar.ButtonData.OK_DONE);
+        ButtonType cancelBtn = new ButtonType("Cancel Order (Secure)", ButtonBar.ButtonData.LEFT);
+        dialog.getDialogPane().getButtonTypes().addAll(deliverBtn, cancelBtn, ButtonType.CLOSE);
+
+        // Style the Cancel button
+        Button cancelNode = (Button) dialog.getDialogPane().lookupButton(cancelBtn);
+        cancelNode.setStyle("-fx-background-color: #c0392b; -fx-text-fill: white;");
+
+        Optional<ButtonType> result = dialog.showAndWait();
+
+        if (result.isPresent()) {
+            if (result.get() == deliverBtn) {
+                deliverReport(order); // Your existing delivery flow
+            } else if (result.get() == cancelBtn) {
+                // This triggers your EXISTING method that prompts for Admin Password!
+                handleCancelOrder(order);
+            }
+        }
     }
 
     private void setupPendingOrdersTable() {
@@ -578,7 +627,8 @@ public class ReceptionDashboardController {
             }
         }
 
-        List<LabOrder> legacyDelivered = labOrderRepository.findByIsReportDeliveredTrueAndDeliveryDateBetween(start, end);
+        List<LabOrder> legacyDelivered = labOrderRepository.findByIsReportDeliveredTrueAndDeliveryDateBetween(start,
+                end);
         for (LabOrder order : legacyDelivered) {
             merged.put(order.getId(), order);
         }
@@ -987,7 +1037,8 @@ public class ReceptionDashboardController {
 
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle(reprintMode ? "Reprint Report" : "Report Delivery");
-        dialog.setHeaderText((reprintMode ? "Reprint Report for Order #" : "Deliver Report for Order #") + order.getId());
+        dialog.setHeaderText(
+                (reprintMode ? "Reprint Report for Order #" : "Deliver Report for Order #") + order.getId());
         dialog.initModality(Modality.APPLICATION_MODAL);
         dialog.setResizable(true);
 
@@ -1058,9 +1109,10 @@ public class ReceptionDashboardController {
             printButton.setDisable(!hasSelection);
         };
 
-        departmentCheckboxes.values().forEach(checkBox -> checkBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
-            refreshActionButtons.run();
-        }));
+        departmentCheckboxes.values()
+                .forEach(checkBox -> checkBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
+                    refreshActionButtons.run();
+                }));
         refreshActionButtons.run();
         Window dialogOwner = mainContainer != null && mainContainer.getScene() != null
                 ? mainContainer.getScene().getWindow()
@@ -1092,7 +1144,8 @@ public class ReceptionDashboardController {
                     continue;
                 }
 
-                snapshot = reportPrintProgressService.markDepartmentsPrinted(freshOrder, selected, getCurrentUsername());
+                snapshot = reportPrintProgressService.markDepartmentsPrinted(freshOrder, selected,
+                        getCurrentUsername());
                 freshOrder = labOrderRepository.findById(freshOrder.getId()).orElse(freshOrder);
                 if (printedStatusLabel != null) {
                     updatePrintedStatusLabel(printedStatusLabel, snapshot);
@@ -1243,8 +1296,18 @@ public class ReceptionDashboardController {
                 : selectedDepartments.stream().collect(Collectors.toCollection(LinkedHashSet::new));
 
         List<LabResult> results = order.getResults() != null ? order.getResults() : List.of();
+
         return results.stream()
                 .filter(result -> {
+                    // --- NEW: EXCLUDE PROCEDURAL/OUTSOURCED TESTS ---
+                    // If the test is marked to skip the worklist, we don't print it on the LIMS
+                    // report
+                    if (result.getTestDefinition() != null &&
+                            Boolean.TRUE.equals(result.getTestDefinition().getSkipWorklist())) {
+                        return false;
+                    }
+
+                    // --- EXISTING DEPARTMENT FILTERING ---
                     if (departmentFilter.isEmpty()) {
                         return true;
                     }
@@ -1277,7 +1340,8 @@ public class ReceptionDashboardController {
                 .toList();
     }
 
-    private void updatePrintedStatusLabel(Label statusLabel, ReportPrintProgressService.ReportProgressSnapshot snapshot) {
+    private void updatePrintedStatusLabel(Label statusLabel,
+            ReportPrintProgressService.ReportProgressSnapshot snapshot) {
         if (statusLabel == null) {
             return;
         }
@@ -1349,7 +1413,8 @@ public class ReceptionDashboardController {
         scrollPane.setFitToWidth(true);
         scrollPane.setPannable(true);
 
-        Label header = new Label("Preview - Order #" + order.getId() + " (" + String.join(", ", selectedDepartments) + ")");
+        Label header = new Label(
+                "Preview - Order #" + order.getId() + " (" + String.join(", ", selectedDepartments) + ")");
         header.setStyle("-fx-font-size: 14; -fx-font-weight: bold;");
 
         BorderPane root = new BorderPane();
@@ -1561,8 +1626,8 @@ public class ReceptionDashboardController {
 
     private void attachPatientHeader(StackPane page, GridPane patientInfo, double printableWidth,
             PageLayout pageLayout) {
-        // 1. Calculate a proportional width for the box (about 48% of the page)
-        double headerWidth = printableWidth * 0.45;
+        // 1. Calculate a proportional width for the box (about 40% of the page)
+        double headerWidth = printableWidth * 0.40;
         patientInfo.setPrefWidth(headerWidth);
         patientInfo.setMaxWidth(headerWidth);
 

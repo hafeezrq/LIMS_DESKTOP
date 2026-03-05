@@ -161,8 +161,17 @@ public class LabWorklistController {
                     patient.getAge() + " / " + patient.getGender());
         });
 
-        testCountColumn.setCellValueFactory(cellData -> new javafx.beans.property.SimpleIntegerProperty(
-                cellData.getValue().getResults() != null ? cellData.getValue().getResults().size() : 0).asObject());
+        testCountColumn.setCellValueFactory(cellData -> {
+            long count = 0;
+            if (cellData.getValue().getResults() != null) {
+                // Only count tests that are NOT procedural/skipped
+                count = cellData.getValue().getResults().stream()
+                        .filter(r -> r.getTestDefinition() == null
+                                || !Boolean.TRUE.equals(r.getTestDefinition().getSkipWorklist()))
+                        .count();
+            }
+            return new javafx.beans.property.SimpleIntegerProperty((int) count).asObject();
+        });
 
         orderDateColumn.setCellValueFactory(cellData -> {
             if (cellData.getValue().getOrderDate() == null) {
@@ -236,17 +245,18 @@ public class LabWorklistController {
     }
 
     private void applyFilter() {
-        List<LabOrder> filteredOrders = allOrders;
+
         String searchTerm = searchField.getText().trim().toLowerCase();
 
         // Do not show orders that have no tests/results attached.
-        filteredOrders = filteredOrders.stream()
-                .filter(order -> order.getResults() != null && !order.getResults().isEmpty())
+        List<LabOrder> filteredOrders = allOrders.stream()
+                .filter(this::hasActualLabTests)
                 .collect(Collectors.toList());
 
         if (pendingRadio.isSelected()) {
             filteredOrders = filteredOrders.stream()
                     .filter(this::isPendingStatus)
+                    .filter(this::hasActualWorkPending)
                     .collect(Collectors.toList());
         } else if (completedRadio.isSelected()) {
             filteredOrders = filteredOrders.stream()
@@ -264,18 +274,63 @@ public class LabWorklistController {
         ordersTable.setItems(observableOrders);
     }
 
+    /**
+     * NEW HELPER: Checks if the order has any tests that actually need the lab
+     * tech.
+     * Returns true if there is at least one test that is PENDING and skipWorklist
+     * is FALSE.
+     */
+    private boolean hasActualWorkPending(LabOrder order) {
+        if (order.getResults() == null)
+            return false;
+
+        return order.getResults().stream()
+                .anyMatch(result -> "PENDING".equals(result.getStatus()) &&
+                        (result.getTestDefinition() == null
+                                || !Boolean.TRUE.equals(result.getTestDefinition().getSkipWorklist())));
+    }
+
+    /**
+     * HELPER: Checks if the order contains at least one test that is
+     * NOT a procedural/skip-worklist test.
+     */
+    private boolean hasActualLabTests(LabOrder order) {
+        if (order == null || order.getResults() == null || order.getResults().isEmpty()) {
+            return false;
+        }
+        return order.getResults().stream()
+                .anyMatch(r -> r.getTestDefinition() != null &&
+                        !Boolean.TRUE.equals(r.getTestDefinition().getSkipWorklist()));
+    }
+
     private void updateStats() {
-        long pending = orderRepository.countPendingWithResults();
+        if (allOrders == null)
+            return;
+
+        // 1. Filter the entire list once to only look at Lab Orders
+        List<LabOrder> labOnlyOrders = allOrders.stream()
+                .filter(this::hasActualLabTests)
+                .collect(Collectors.toList());
+
+        // 2. Count Pending
+        long pending = labOnlyOrders.stream()
+                .filter(this::isPendingStatus)
+                .filter(this::hasActualWorkPending)
+                .count();
+
+        // 3. Count Completed Today
         LocalDate today = LocalDate.now();
-        long completedToday = orderRepository.findByStatusAndOrderDateBetween(
-                "COMPLETED",
-                today.atStartOfDay(),
-                today.atTime(23, 59, 59)).stream()
-                .filter(order -> order.getResults() != null && !order.getResults().isEmpty())
+        long completedToday = labOnlyOrders.stream()
+                .filter(o -> "COMPLETED".equals(o.getStatus()))
+                .filter(o -> o.getOrderDate() != null && o.getOrderDate().toLocalDate().equals(today))
                 .count();
-        long total = orderRepository.findAll().stream()
-                .filter(order -> order.getResults() != null && !order.getResults().isEmpty())
-                .count();
+
+        // long total = orderRepository.findAll().stream()
+        // .filter(order -> order.getResults() != null && !order.getResults().isEmpty())
+        // .count();
+
+        // 4. Total Count
+        long total = labOnlyOrders.size();
 
         pendingCountLabel.setText(String.valueOf(pending));
         completedTodayLabel.setText(String.valueOf(completedToday));

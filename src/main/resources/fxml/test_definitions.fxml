@@ -52,6 +52,24 @@
                     <TableColumn fx:id="colPrice" text="Price" prefWidth="100">
                         <cellValueFactory><PropertyValueFactory property="price"/></cellValueFactory>
                     </TableColumn>
+
+                    <TableColumn fx:id="colManualPrice" text="Manual Price" prefWidth="120">
+                        <cellValueFactory>
+                            <PropertyValueFactory property="manualPriceRequired"/>
+                        </cellValueFactory>
+                    </TableColumn>
+                    
+                    <TableColumn fx:id="colSkipWorklist" text="Skip Worklist" prefWidth="120">
+                        <cellValueFactory>
+                            <PropertyValueFactory property="skipWorklist"/>
+                        </cellValueFactory>
+                    </TableColumn>
+                    <TableColumn fx:id="colActive" text="Status" prefWidth="80">
+                        <cellValueFactory>
+                            <PropertyValueFactory property="active"/>
+                        </cellValueFactory>
+                    </TableColumn>                    
+
                     <TableColumn fx:id="colActions" text="Actions" prefWidth="240"/>
                 </columns>
                 <columnResizePolicy>

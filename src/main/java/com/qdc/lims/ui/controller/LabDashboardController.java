@@ -22,6 +22,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /**
  * JavaFX controller for the lab technician dashboard window.
@@ -108,8 +109,10 @@ public class LabDashboardController {
             // Run database query in background thread to avoid UI freeze
             new Thread(() -> {
                 try {
-                    long newPendingCount = labOrderRepository.countPendingWithResults();
-                    long newCompletedCount = countCompletedTodayWithResults();
+                    LocalDateTime start = LocalDate.now().atStartOfDay();
+                    LocalDateTime end = LocalDate.now().atTime(23, 59, 59);
+                    long newPendingCount = labOrderRepository.countActualLabPending();
+                    long newCompletedCount = labOrderRepository.countActualLabCompletedInRange(start, end);
 
                     // Update UI on JavaFX thread
                     Platform.runLater(() -> {
@@ -147,9 +150,11 @@ public class LabDashboardController {
      */
     private void loadDashboardStats() {
         try {
+            LocalDateTime start = LocalDate.now().atStartOfDay();
+            LocalDateTime end = LocalDate.now().atTime(23, 59, 59);
             // Pending = anything NOT completed and NOT cancelled (same logic as Reception)
-            long pendingCount = labOrderRepository.countPendingWithResults();
-            long completedCount = countCompletedTodayWithResults();
+            long pendingCount = labOrderRepository.countActualLabPending();
+            long completedCount = labOrderRepository.countActualLabCompletedInRange(start, end);
 
             pendingCountLabel.setText(String.valueOf(pendingCount));
             completedCountLabel.setText(String.valueOf(completedCount));
@@ -278,6 +283,7 @@ public class LabDashboardController {
                 today.atStartOfDay(),
                 today.atTime(23, 59, 59)).stream()
                 .filter(order -> order.getResults() != null && !order.getResults().isEmpty())
+                .filter(this::hasActualLabTests)
                 .count();
     }
 
@@ -320,6 +326,31 @@ public class LabDashboardController {
             return suffix;
         }
         return originalTitle + " - " + suffix;
+    }
+
+    /**
+     * Checks if the order contains at least one test that is NOT a skip-worklist
+     * test.
+     */
+    private boolean hasActualLabTests(com.qdc.lims.entity.LabOrder order) {
+        if (order == null || order.getResults() == null || order.getResults().isEmpty()) {
+            return false;
+        }
+        return order.getResults().stream()
+                .anyMatch(r -> r.getTestDefinition() != null &&
+                        !Boolean.TRUE.equals(r.getTestDefinition().getSkipWorklist()));
+    }
+
+    /**
+     * Checks if there is at least one test that is PENDING and NOT skipped.
+     */
+    private boolean hasActualWorkPending(com.qdc.lims.entity.LabOrder order) {
+        if (order.getResults() == null)
+            return false;
+        return order.getResults().stream()
+                .anyMatch(result -> "PENDING".equals(result.getStatus()) &&
+                        (result.getTestDefinition() == null
+                                || !Boolean.TRUE.equals(result.getTestDefinition().getSkipWorklist())));
     }
 
     @FXML

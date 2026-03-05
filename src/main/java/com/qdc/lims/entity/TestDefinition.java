@@ -2,14 +2,9 @@ package com.qdc.lims.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
-
 import java.math.BigDecimal;
 import java.util.List;
 
-/**
- * Master data definition for a laboratory test, including pricing,
- * reference-range metadata, and relationships to departments and panels.
- */
 @Entity
 @Table(name = "test_definition")
 @Data
@@ -18,79 +13,49 @@ import java.util.List;
 @Builder
 public class TestDefinition {
 
-    /**
-     * Surrogate primary key.
-     */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /**
-     * Display name of the test.
-     */
     @Column(nullable = false)
     private String testName;
 
-    /**
-     * Optional short code used in order entry and reports.
-     */
     private String shortCode;
 
-    /**
-     * Owning department/category for the test.
-     */
     @ManyToOne
     @JoinColumn(name = "department_id", nullable = false)
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private Department department;
 
-    /**
-     * Category under the department (optional until populated).
-     */
     @ManyToOne
     @JoinColumn(name = "category_id")
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private TestCategory category;
 
-    /**
-     * Measurement unit (nullable for qualitative tests).
-     */
     private String unit;
-
-    /**
-     * Default minimum reference value.
-     */
     private BigDecimal minRange;
-
-    /**
-     * Default maximum reference value.
-     */
     private BigDecimal maxRange;
-
-    /**
-     * Price charged for the test.
-     */
     private BigDecimal price;
 
-    /**
-     * Soft-active flag.
-     */
     @Builder.Default
     private Boolean active = true;
 
-    /**
-     * Panels that include this test.
-     */
+    // NEW FIELDS
+    @Builder.Default
+    @Column(name = "manual_price_required")
+    private Boolean manualPriceRequired = false;
+
+    @Builder.Default
+    @Column(name = "skip_worklist")
+    private Boolean skipWorklist = false;
+
     @ManyToMany(mappedBy = "tests")
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private List<Panel> panels;
 
-    /**
-     * Reference ranges associated with the test.
-     */
     @OneToMany(mappedBy = "test", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("minAge ASC, maxAge ASC")
     @ToString.Exclude
