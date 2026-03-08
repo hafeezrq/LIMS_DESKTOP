@@ -343,11 +343,11 @@ public class TestDefinitionsController {
         });
         TextField price = new TextField(test.getPrice() != null ? test.getPrice().toPlainString() : "");
         TextField unit = new TextField(test.getUnit());
-        // --- NEW CONTROLS ---
+
         CheckBox manualPriceCb = new CheckBox("Requires Manual Price entry (ECG/X-Ray)");
         manualPriceCb.setSelected(test.getManualPriceRequired() != null && test.getManualPriceRequired());
 
-        CheckBox skipWorklistCb = new CheckBox("Skip Lab Worklist (Direct to Results)");
+        CheckBox skipWorklistCb = new CheckBox("Skip Lab Worklist (No Results Entry, No Printing)");
         skipWorklistCb.setSelected(test.getSkipWorklist() != null && test.getSkipWorklist());
         CheckBox activeCb = new CheckBox("Active (Visible in Order Entry)");
         activeCb.setSelected(test.getActive() != null ? test.getActive() : true);
@@ -364,8 +364,10 @@ public class TestDefinitionsController {
         grid.add(unit, 1, 4);
         grid.add(new Label("Price:"), 0, 5);
         grid.add(price, 1, 5);
-        grid.add(new Label("Status:"), 0, 8);
-        grid.add(activeCb, 1, 8);
+        grid.add(new Label("Status:"), 0, 6);
+        grid.add(activeCb, 1, 6);
+        grid.add(new Label("Skip:"), 0, 7);
+        grid.add(skipWorklistCb, 1, 7);
 
         dialog.getDialogPane().setContent(grid);
 
@@ -392,8 +394,9 @@ public class TestDefinitionsController {
                 TestCategory resolvedCategory = testDefinitionService.findOrCreateCategory(categoryName, selectedDept);
                 test.setCategory(resolvedCategory);
                 test.setUnit(unit.getText() != null ? unit.getText().trim() : null);
-                // test.setActive(true);
                 test.setActive(activeCb.isSelected());
+                test.setManualPriceRequired(manualPriceCb.isSelected());
+                test.setSkipWorklist(skipWorklistCb.isSelected());
                 try {
                     String trimmedPrice = price.getText() != null ? price.getText().trim() : "";
                     if (!trimmedPrice.isEmpty()) {

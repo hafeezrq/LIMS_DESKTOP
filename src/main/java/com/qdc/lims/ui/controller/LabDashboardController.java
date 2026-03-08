@@ -276,16 +276,16 @@ public class LabDashboardController {
         }
     }
 
-    private long countCompletedTodayWithResults() {
-        LocalDate today = LocalDate.now();
-        return labOrderRepository.findByStatusAndOrderDateBetween(
-                "COMPLETED",
-                today.atStartOfDay(),
-                today.atTime(23, 59, 59)).stream()
-                .filter(order -> order.getResults() != null && !order.getResults().isEmpty())
-                .filter(this::hasActualLabTests)
-                .count();
-    }
+    // private long countCompletedTodayWithResults() {
+    // LocalDate today = LocalDate.now();
+    // return labOrderRepository.findByStatusAndOrderDateBetween(
+    // "COMPLETED",
+    // today.atStartOfDay(),
+    // today.atTime(23, 59, 59)).stream()
+    // .filter(order -> order.getResults() != null && !order.getResults().isEmpty())
+    // .filter(this::hasActualLabTests)
+    // .count();
+    // }
 
     private Tab findCurrentSessionTab() {
         if (mainContainer == null || mainContainer.getScene() == null) {
@@ -326,31 +326,6 @@ public class LabDashboardController {
             return suffix;
         }
         return originalTitle + " - " + suffix;
-    }
-
-    /**
-     * Checks if the order contains at least one test that is NOT a skip-worklist
-     * test.
-     */
-    private boolean hasActualLabTests(com.qdc.lims.entity.LabOrder order) {
-        if (order == null || order.getResults() == null || order.getResults().isEmpty()) {
-            return false;
-        }
-        return order.getResults().stream()
-                .anyMatch(r -> r.getTestDefinition() != null &&
-                        !Boolean.TRUE.equals(r.getTestDefinition().getSkipWorklist()));
-    }
-
-    /**
-     * Checks if there is at least one test that is PENDING and NOT skipped.
-     */
-    private boolean hasActualWorkPending(com.qdc.lims.entity.LabOrder order) {
-        if (order.getResults() == null)
-            return false;
-        return order.getResults().stream()
-                .anyMatch(result -> "PENDING".equals(result.getStatus()) &&
-                        (result.getTestDefinition() == null
-                                || !Boolean.TRUE.equals(result.getTestDefinition().getSkipWorklist())));
     }
 
     @FXML

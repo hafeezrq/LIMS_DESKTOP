@@ -44,11 +44,11 @@ public class TestDefinition {
 
     // NEW FIELDS
     @Builder.Default
-    @Column(name = "manual_price_required")
+    @Column(name = "manual_price_required", nullable = false)
     private Boolean manualPriceRequired = false;
 
     @Builder.Default
-    @Column(name = "skip_worklist")
+    @Column(name = "skip_worklist", nullable = false)
     private Boolean skipWorklist = false;
 
     @ManyToMany(mappedBy = "tests")
