@@ -364,10 +364,12 @@ public class TestDefinitionsController {
         grid.add(unit, 1, 4);
         grid.add(new Label("Price:"), 0, 5);
         grid.add(price, 1, 5);
-        grid.add(new Label("Status:"), 0, 6);
-        grid.add(activeCb, 1, 6);
-        grid.add(new Label("Skip:"), 0, 7);
-        grid.add(skipWorklistCb, 1, 7);
+        grid.add(new Label("Manual Price:"), 0, 6);
+        grid.add(manualPriceCb, 1, 6);
+        grid.add(new Label("Status:"), 0, 7);
+        grid.add(activeCb, 1, 7);
+        grid.add(new Label("Skip:"), 0, 8);
+        grid.add(skipWorklistCb, 1, 8);
 
         dialog.getDialogPane().setContent(grid);
 
