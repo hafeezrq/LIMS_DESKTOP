@@ -63,6 +63,7 @@ public class ConfigService {
         createIfNotExists("REPORT_HEADER_TEXT", "", "Reports");
         createIfNotExists("REPORT_FOOTER_TEXT", "", "Reports");
         createIfNotExists("REPORT_LOGO_PATH", "", "Reports");
+        createIfNotExists("REPORT_PATIENT_INFO_OFFSET_Y_MM", "0", "Reports");
         clearLegacyReportFooterDefault();
 
         refreshCache();

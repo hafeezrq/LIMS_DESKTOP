@@ -1,6 +1,7 @@
 package com.qdc.lims.ui.controller;
 
 import com.qdc.lims.service.BrandingService;
+import com.qdc.lims.service.ConfigService;
 import com.qdc.lims.ui.SessionManager;
 import com.qdc.lims.ui.navigation.DashboardType;
 import com.qdc.lims.ui.util.LogoutUtil;
@@ -75,12 +76,15 @@ import javafx.util.Duration;
  */
 @Component("receptionDashboardController")
 public class ReceptionDashboardController {
+    private static final String REPORT_PATIENT_INFO_OFFSET_Y_MM = "REPORT_PATIENT_INFO_OFFSET_Y_MM";
+    private static final double POINTS_PER_MM = 72.0 / 25.4;
 
     private final ApplicationContext applicationContext;
     private final LabOrderRepository labOrderRepository;
     private final PanelRepository panelRepository;
     private final ReferenceRangeRepository referenceRangeRepository;
     private final BrandingService brandingService;
+    private final ConfigService configService;
     private final LocaleFormatService localeFormatService;
     private final OrderCancellationService orderCancellationService;
     private final ReportPrintProgressService reportPrintProgressService;
@@ -185,6 +189,7 @@ public class ReceptionDashboardController {
             PanelRepository panelRepository,
             ReferenceRangeRepository referenceRangeRepository,
             BrandingService brandingService,
+            ConfigService configService,
             LocaleFormatService localeFormatService,
             OrderCancellationService orderCancellationService,
             ReportPrintProgressService reportPrintProgressService) {
@@ -193,6 +198,7 @@ public class ReceptionDashboardController {
         this.panelRepository = panelRepository;
         this.referenceRangeRepository = referenceRangeRepository;
         this.brandingService = brandingService;
+        this.configService = configService;
         this.localeFormatService = localeFormatService;
         this.orderCancellationService = orderCancellationService;
         this.reportPrintProgressService = reportPrintProgressService;
@@ -1636,7 +1642,7 @@ public class ReceptionDashboardController {
 
         // 3. CALCULATION FOR PERFECT 0.5 INCH ALIGNMENT
         // Desired distance from physical edge = 36 points (0.5 inch)
-        double targetTopPoints = 36.0;
+        double targetTopPoints = 36.0 + resolvePatientInfoOffsetYPoints();
         double targetRightPoints = 36.0;
 
         // Subtract what the printer is already enforcing
@@ -1646,6 +1652,22 @@ public class ReceptionDashboardController {
 
         // 4. Add the box to the page StackPane
         page.getChildren().add(patientInfo);
+    }
+
+    private double resolvePatientInfoOffsetYPoints() {
+        String rawValue = configService.getTrimmed(REPORT_PATIENT_INFO_OFFSET_Y_MM, "0");
+        if (rawValue.isBlank()) {
+            return 0;
+        }
+        try {
+            double offsetMm = Double.parseDouble(rawValue);
+            if (Double.isNaN(offsetMm) || Double.isInfinite(offsetMm)) {
+                return 0;
+            }
+            return offsetMm * POINTS_PER_MM;
+        } catch (NumberFormatException ex) {
+            return 0;
+        }
     }
 
     private PageContext newPage(List<StackPane> pages, double printableWidth, double printableHeight,

@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.Separator?>
+<?import javafx.scene.control.TableColumn?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.text.Font?>
+
+<BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.qdc.lims.ui.controller.ResultOptionsController"
+            prefHeight="540.0" prefWidth="860.0">
+
+    <top>
+        <VBox spacing="8" style="-fx-background-color: #34495e; -fx-padding: 15;">
+            <HBox alignment="CENTER_LEFT" spacing="10">
+                <Label text="Result Options Management" textFill="WHITE">
+                    <font>
+                        <Font name="System Bold" size="18.0"/>
+                    </font>
+                </Label>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Button text="Close" onAction="#handleClose" styleClass="admin-close-button"/>
+            </HBox>
+            <Label fx:id="testNameLabel" text="For Test: ..." textFill="#ecf0f1">
+                <font>
+                    <Font size="14.0"/>
+                </font>
+            </Label>
+            <ComboBox fx:id="testCombo" prefWidth="420" promptText="Select a test to manage fixed dropdown values"/>
+        </VBox>
+    </top>
+
+    <center>
+        <TableView fx:id="optionsTable">
+            <columns>
+                <TableColumn fx:id="codeColumn" prefWidth="180.0" text="Code"/>
+                <TableColumn fx:id="labelColumn" prefWidth="250.0" text="Label"/>
+                <TableColumn fx:id="orderColumn" prefWidth="120.0" text="Display Order"/>
+                <TableColumn fx:id="activeColumn" prefWidth="120.0" text="Status"/>
+            </columns>
+            <columnResizePolicy>
+                <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+            </columnResizePolicy>
+        </TableView>
+    </center>
+
+    <right>
+        <VBox spacing="15.0" style="-fx-background-color: #f5f5f5; -fx-padding: 15;">
+            <Label text="Add / Edit Option">
+                <font>
+                    <Font name="System Bold" size="14.0"/>
+                </font>
+            </Label>
+
+            <GridPane hgap="10" vgap="10">
+                <Label text="Code:" GridPane.columnIndex="0" GridPane.rowIndex="0"/>
+                <TextField fx:id="codeField" promptText="e.g. NON_REACTIVE" GridPane.columnIndex="1" GridPane.rowIndex="0"/>
+
+                <Label text="Label:" GridPane.columnIndex="0" GridPane.rowIndex="1"/>
+                <TextField fx:id="labelField" promptText="e.g. Non-reactive" GridPane.columnIndex="1" GridPane.rowIndex="1"/>
+
+                <Label text="Display Order:" GridPane.columnIndex="0" GridPane.rowIndex="2"/>
+                <TextField fx:id="displayOrderField" promptText="0" GridPane.columnIndex="1" GridPane.rowIndex="2"/>
+
+                <Label text="Active:" GridPane.columnIndex="0" GridPane.rowIndex="3"/>
+                <CheckBox fx:id="activeCheck" text="Enabled for dropdown" GridPane.columnIndex="1" GridPane.rowIndex="3"/>
+            </GridPane>
+
+            <VBox spacing="10">
+                <Button fx:id="saveButton" text="Add Option" onAction="#handleSave"
+                        maxWidth="Infinity" style="-fx-background-color: #27ae60; -fx-text-fill: white;"/>
+                <Button text="New / Clear" onAction="#handleNew"
+                        maxWidth="Infinity" style="-fx-background-color: #3498db; -fx-text-fill: white;"/>
+                <Button fx:id="deleteButton" text="Delete Selected" onAction="#handleDelete" disable="true"
+                        maxWidth="Infinity" style="-fx-background-color: #e74c3c; -fx-text-fill: white;"/>
+                <Separator/>
+                <Button fx:id="importForTestButton" text="Import Defaults (This Test)"
+                        onAction="#handleImportDefaultsForSelectedTest" disable="true"
+                        maxWidth="Infinity" style="-fx-background-color: #8e44ad; -fx-text-fill: white;"/>
+                <Button text="Import Common Defaults (All Tests)" onAction="#handleImportCommonDefaults"
+                        maxWidth="Infinity" style="-fx-background-color: #2c3e50; -fx-text-fill: white;"/>
+            </VBox>
+
+            <Label fx:id="statusLabel" text="Select a test." wrapText="true"/>
+            <Region VBox.vgrow="ALWAYS"/>
+        </VBox>
+    </right>
+
+    <bottom>
+        <HBox spacing="10" style="-fx-padding: 10 15 15 15;">
+            <Label text="Tip: For tests with options, Result Entry will show a dropdown instead of free text."/>
+        </HBox>
+    </bottom>
+</BorderPane>

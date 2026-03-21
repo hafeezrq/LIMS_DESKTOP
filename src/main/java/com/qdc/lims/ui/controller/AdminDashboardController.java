@@ -262,6 +262,11 @@ public class AdminDashboardController {
     }
 
     @FXML
+    private void handleResultOptions() {
+        openAdminWindow("/fxml/result_options.fxml", "Result Options Management");
+    }
+
+    @FXML
     private void handleTestCategories() {
         openAdminWindow("/fxml/category_management.fxml", "Department Management");
     }

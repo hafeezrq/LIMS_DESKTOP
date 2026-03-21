@@ -8,6 +8,7 @@ import com.qdc.lims.repository.LabOrderRepository;
 import com.qdc.lims.repository.ReferenceRangeRepository;
 import com.qdc.lims.service.LocaleFormatService;
 import com.qdc.lims.service.ResultService;
+import com.qdc.lims.service.TestResultOptionService;
 import com.qdc.lims.util.LabResultDisplayOrder;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
@@ -15,6 +16,7 @@ import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.SelectionMode;
 import javafx.scene.control.Tab;
@@ -30,9 +32,12 @@ import javafx.stage.Stage;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -61,6 +66,7 @@ public class ResultEntryController {
 
     private final LabOrderRepository orderRepository;
     private final ResultService resultService;
+    private final TestResultOptionService testResultOptionService;
     private final LocaleFormatService localeFormatService;
     private final ReferenceRangeRepository referenceRangeRepository;
     private LabOrder currentOrder;
@@ -68,6 +74,7 @@ public class ResultEntryController {
 
     private final List<TableView<LabResult>> resultTables = new ArrayList<>();
     private final Map<Tab, TableView<LabResult>> categoryTabTableMap = new LinkedHashMap<>();
+    private final Map<Long, List<String>> resultOptionsByTestId = new LinkedHashMap<>();
     private TableView<LabResult> activeResultsTable;
 
     // Flag to prevent selection listener loops during programmatic navigation.
@@ -75,10 +82,12 @@ public class ResultEntryController {
 
     public ResultEntryController(LabOrderRepository orderRepository,
             ResultService resultService,
+            TestResultOptionService testResultOptionService,
             LocaleFormatService localeFormatService,
             ReferenceRangeRepository referenceRangeRepository) {
         this.orderRepository = orderRepository;
         this.resultService = resultService;
+        this.testResultOptionService = testResultOptionService;
         this.localeFormatService = localeFormatService;
         this.referenceRangeRepository = referenceRangeRepository;
     }
@@ -184,17 +193,29 @@ public class ResultEntryController {
 
         resultValueColumn.setCellFactory(column -> new TableCell<>() {
             private TextField textField;
+            private ComboBox<String> comboBox;
 
             @Override
             public void startEdit() {
                 if (!isEmpty()) {
                     super.startEdit();
                     activeResultsTable = getTableView();
-                    createTextField();
-                    setText(null);
-                    setGraphic(textField);
-                    textField.selectAll();
-                    Platform.runLater(textField::requestFocus);
+                    LabResult rowItem = currentRowItem();
+                    if (hasConfiguredOptions(rowItem)) {
+                        createComboBox(rowItem);
+                        setText(null);
+                        setGraphic(comboBox);
+                        Platform.runLater(() -> {
+                            comboBox.requestFocus();
+                            comboBox.show();
+                        });
+                    } else {
+                        createTextField();
+                        setText(null);
+                        setGraphic(textField);
+                        textField.selectAll();
+                        Platform.runLater(textField::requestFocus);
+                    }
                 }
             }
 
@@ -212,18 +233,32 @@ public class ResultEntryController {
                     setText(null);
                     setGraphic(null);
                 } else if (isEditing()) {
-                    if (textField != null) {
-                        textField.setText(currentValue());
+                    LabResult rowItem = currentRowItem();
+                    if (hasConfiguredOptions(rowItem)) {
+                        if (comboBox != null) {
+                            comboBox.setValue(currentValue());
+                        }
+                        setText(null);
+                        setGraphic(comboBox);
+                    } else {
+                        if (textField != null) {
+                            textField.setText(currentValue());
+                        }
+                        setText(null);
+                        setGraphic(textField);
                     }
-                    setText(null);
-                    setGraphic(textField);
                 } else {
                     setText(currentValue());
                     setGraphic(null);
                 }
             }
 
+            private LabResult currentRowItem() {
+                return getTableRow() != null ? getTableRow().getItem() : null;
+            }
+
             private void createTextField() {
+                comboBox = null;
                 textField = new TextField(currentValue());
                 textField.setMinWidth(this.getWidth() - this.getGraphicTextGap() * 2);
 
@@ -261,6 +296,56 @@ public class ResultEntryController {
                 textField.focusedProperty().addListener((obs, wasFocused, isNowFocused) -> {
                     if (!isNowFocused && isEditing()) {
                         commitEdit(textField.getText());
+                    }
+                });
+            }
+
+            private void createComboBox(LabResult rowItem) {
+                textField = null;
+                List<String> options = new ArrayList<>(configuredOptionsFor(rowItem));
+                String current = currentValue();
+                if (current != null && !current.isBlank() && !options.contains(current)) {
+                    options.add(0, current);
+                }
+
+                comboBox = new ComboBox<>(FXCollections.observableArrayList(options));
+                comboBox.setEditable(false);
+                comboBox.setMaxWidth(Double.MAX_VALUE);
+                comboBox.setValue(current);
+
+                comboBox.setOnAction(event -> {
+                    String selected = comboBox.getValue();
+                    if (selected != null) {
+                        commitEdit(selected);
+                    }
+                });
+
+                comboBox.setOnKeyPressed(event -> {
+                    if (event.getCode() == KeyCode.ENTER || event.getCode() == KeyCode.TAB
+                            || event.getCode() == KeyCode.DOWN || event.getCode() == KeyCode.UP) {
+                        String selected = comboBox.getValue() != null ? comboBox.getValue() : currentValue();
+                        commitEdit(selected != null ? selected : "");
+
+                        int delta;
+                        if (event.getCode() == KeyCode.UP) {
+                            delta = -1;
+                        } else if (event.getCode() == KeyCode.DOWN) {
+                            delta = 1;
+                        } else {
+                            delta = event.isShiftDown() ? -1 : 1;
+                        }
+                        navigateToRow(delta);
+                        event.consume();
+                    } else if (event.getCode() == KeyCode.ESCAPE) {
+                        cancelEdit();
+                        event.consume();
+                    }
+                });
+
+                comboBox.focusedProperty().addListener((obs, wasFocused, isNowFocused) -> {
+                    if (!isNowFocused && isEditing()) {
+                        String selected = comboBox.getValue() != null ? comboBox.getValue() : currentValue();
+                        commitEdit(selected != null ? selected : "");
                     }
                 });
             }
@@ -368,8 +453,40 @@ public class ResultEntryController {
                         .sorted(LabResultDisplayOrder.comparator())
                         .toList();
 
+        loadResultOptions(sortedResults);
         buildDepartmentTabs(sortedResults);
         Platform.runLater(this::focusFirstResultCell);
+    }
+
+    private void loadResultOptions(List<LabResult> results) {
+        resultOptionsByTestId.clear();
+        if (results == null || results.isEmpty()) {
+            return;
+        }
+
+        Set<Long> testIds = new HashSet<>();
+        for (LabResult result : results) {
+            if (result == null || result.getTestDefinition() == null || result.getTestDefinition().getId() == null) {
+                continue;
+            }
+            testIds.add(result.getTestDefinition().getId());
+        }
+        if (testIds.isEmpty()) {
+            return;
+        }
+
+        resultOptionsByTestId.putAll(testResultOptionService.findActiveOptionLabelsByTestIds(testIds));
+    }
+
+    private List<String> configuredOptionsFor(LabResult result) {
+        if (result == null || result.getTestDefinition() == null || result.getTestDefinition().getId() == null) {
+            return List.of();
+        }
+        return resultOptionsByTestId.getOrDefault(result.getTestDefinition().getId(), List.of());
+    }
+
+    private boolean hasConfiguredOptions(LabResult result) {
+        return !configuredOptionsFor(result).isEmpty();
     }
 
     private void buildDepartmentTabs(List<LabResult> sortedResults) {
@@ -666,6 +783,9 @@ public class ResultEntryController {
             Node focusOwner = table.getScene().getFocusOwner();
             if (focusOwner instanceof TextField textField) {
                 latestValue = textField.getText();
+            } else if (focusOwner instanceof ComboBox<?> comboBox) {
+                Object selectedValue = comboBox.getValue();
+                latestValue = selectedValue != null ? Objects.toString(selectedValue) : latestValue;
             }
         }
 

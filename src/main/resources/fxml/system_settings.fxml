@@ -65,6 +65,12 @@
                              <Label text="Report Footer / Disclaimer:" style="-fx-font-weight: bold;"/>
                              <TextArea fx:id="footerTextArea" promptText="Bottom of the PDF report" prefRowCount="3" wrapText="true"/>
                         </VBox>
+
+                        <VBox spacing="5">
+                             <Label text="Patient Details Vertical Offset (mm):" style="-fx-font-weight: bold;"/>
+                             <TextField fx:id="patientInfoOffsetYField" promptText="0"/>
+                             <Label text="Use positive values to move down and negative values to move up." style="-fx-text-fill: grey; -fx-font-size: 10;"/>
+                        </VBox>
                         
                         <Separator/>
                         

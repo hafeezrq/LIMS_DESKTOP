@@ -6,6 +6,7 @@ import com.qdc.lims.entity.TestDefinition;
 import com.qdc.lims.repository.DepartmentRepository;
 import com.qdc.lims.repository.TestCategoryRepository;
 import com.qdc.lims.repository.TestDefinitionRepository;
+import com.qdc.lims.repository.TestResultOptionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -27,6 +28,9 @@ public class TestDefinitionService {
 
     @Autowired
     private TestCategoryRepository testCategoryRepository;
+
+    @Autowired
+    private TestResultOptionRepository testResultOptionRepository;
 
     /**
      * @return all test definitions
@@ -64,6 +68,7 @@ public class TestDefinitionService {
      * @param id test id
      */
     public void deleteById(Long id) {
+        testResultOptionRepository.deleteByTestId(id);
         testDefinitionRepository.deleteById(id);
     }
 

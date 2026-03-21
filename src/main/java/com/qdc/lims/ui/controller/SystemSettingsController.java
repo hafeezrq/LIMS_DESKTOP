@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 
 import java.io.File;
+import java.math.BigDecimal;
 
 /**
  * Controller for the system settings screen backed by {@link ConfigService}
@@ -17,6 +18,7 @@ import java.io.File;
  */
 @Controller
 public class SystemSettingsController {
+    private static final String REPORT_PATIENT_INFO_OFFSET_Y_MM = "REPORT_PATIENT_INFO_OFFSET_Y_MM";
 
     @Autowired
     private ConfigService configService;
@@ -40,6 +42,8 @@ public class SystemSettingsController {
     private TextArea footerTextArea;
     @FXML
     private TextField logoPathField;
+    @FXML
+    private TextField patientInfoOffsetYField;
 
     // Billing
     @FXML
@@ -74,6 +78,7 @@ public class SystemSettingsController {
         headerTextField.setText(configService.get("REPORT_HEADER_TEXT"));
         footerTextArea.setText(configService.get("REPORT_FOOTER_TEXT"));
         logoPathField.setText(configService.get("REPORT_LOGO_PATH"));
+        patientInfoOffsetYField.setText(configService.get(REPORT_PATIENT_INFO_OFFSET_Y_MM, "0"));
 
         currencySymbolField.setText(configService.get("CURRENCY_SYMBOL"));
         taxRateField.setText(configService.get("TAX_RATE_PERCENT"));
@@ -87,6 +92,8 @@ public class SystemSettingsController {
     @FXML
     private void handleSave() {
         try {
+            String patientInfoOffsetMm = normalizeMillimeterOffset(patientInfoOffsetYField.getText());
+
             configService.set("CLINIC_NAME", clinicNameField.getText());
             configService.set("CLINIC_ADDRESS", clinicAddressArea.getText());
             configService.set("CLINIC_PHONE", clinicPhoneField.getText());
@@ -95,6 +102,7 @@ public class SystemSettingsController {
             configService.set("REPORT_HEADER_TEXT", headerTextField.getText());
             configService.set("REPORT_FOOTER_TEXT", footerTextArea.getText());
             configService.set("REPORT_LOGO_PATH", logoPathField.getText());
+            configService.set(REPORT_PATIENT_INFO_OFFSET_Y_MM, patientInfoOffsetMm);
 
             configService.set("CURRENCY_SYMBOL", currencySymbolField.getText());
             configService.set("TAX_RATE_PERCENT", taxRateField.getText());
@@ -152,5 +160,21 @@ public class SystemSettingsController {
     private void handleClose() {
         com.qdc.lims.ui.util.ViewCloseUtil.closeCurrentTabOrWindow(
                 closeButton != null ? closeButton : clinicNameField);
+    }
+
+    private String normalizeMillimeterOffset(String rawValue) {
+        String trimmed = rawValue == null ? "" : rawValue.trim();
+        if (trimmed.isEmpty()) {
+            return "0";
+        }
+        try {
+            double value = Double.parseDouble(trimmed);
+            if (Double.isNaN(value) || Double.isInfinite(value)) {
+                throw new NumberFormatException("Not finite");
+            }
+            return BigDecimal.valueOf(value).stripTrailingZeros().toPlainString();
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("Patient details vertical offset must be a valid number (mm).");
+        }
     }
 }

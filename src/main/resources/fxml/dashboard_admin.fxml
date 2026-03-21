@@ -44,6 +44,7 @@
                     <MenuItem text="Departments" onAction="#handleTestCategories"/>
                     <MenuItem text="Test Recipes" onAction="#handleTestRecipes"/>
                     <MenuItem text="Reference Ranges" onAction="#handleReferenceRanges"/>
+                    <MenuItem text="Result Options" onAction="#handleResultOptions"/>
                 </Menu>
                 
                 <Menu text="Doctor Management">
