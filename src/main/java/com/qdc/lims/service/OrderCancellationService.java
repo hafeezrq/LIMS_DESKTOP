@@ -6,11 +6,14 @@ import com.qdc.lims.entity.LabOrder;
 import com.qdc.lims.entity.LabResult;
 import com.qdc.lims.entity.Payment;
 import com.qdc.lims.entity.TestConsumption;
+import com.qdc.lims.entity.User;
 import com.qdc.lims.repository.CommissionLedgerRepository;
 import com.qdc.lims.repository.InventoryItemRepository;
 import com.qdc.lims.repository.LabOrderRepository;
 import com.qdc.lims.repository.PaymentRepository;
 import com.qdc.lims.repository.TestConsumptionRepository;
+import com.qdc.lims.repository.UserRepository;
+import com.qdc.lims.ui.CurrentUserProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,35 +35,42 @@ public class OrderCancellationService {
     private final CommissionLedgerRepository commissionLedgerRepository;
     private final PaymentRepository paymentRepository;
     private final CancellationApprovalKeyService cancellationApprovalKeyService;
+    private final CurrentUserProvider currentUserProvider;
+    private final UserRepository userRepository;
 
     public OrderCancellationService(LabOrderRepository labOrderRepository,
             TestConsumptionRepository testConsumptionRepository,
             InventoryItemRepository inventoryItemRepository,
             CommissionLedgerRepository commissionLedgerRepository,
             PaymentRepository paymentRepository,
-            CancellationApprovalKeyService cancellationApprovalKeyService) {
+            CancellationApprovalKeyService cancellationApprovalKeyService,
+            CurrentUserProvider currentUserProvider,
+            UserRepository userRepository) {
         this.labOrderRepository = labOrderRepository;
         this.testConsumptionRepository = testConsumptionRepository;
         this.inventoryItemRepository = inventoryItemRepository;
         this.commissionLedgerRepository = commissionLedgerRepository;
         this.paymentRepository = paymentRepository;
         this.cancellationApprovalKeyService = cancellationApprovalKeyService;
+        this.currentUserProvider = currentUserProvider;
+        this.userRepository = userRepository;
     }
 
     /**
      * Marks an order as currently being reviewed by lab staff.
      */
     @Transactional
-    public void markUnderLabReview(Long orderId) {
+    public boolean markUnderLabReview(Long orderId) {
         LabOrder order = labOrderRepository.findById(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
 
         if (!"PENDING".equals(order.getStatus())) {
-            return;
+            return false;
         }
 
         order.setStatus("IN_PROGRESS");
         labOrderRepository.save(order);
+        return true;
     }
 
     /**
@@ -87,34 +97,58 @@ public class OrderCancellationService {
      * Returns true if the order can still be cancelled by reception.
      */
     public boolean canCancel(Long orderId) {
-        if (orderId == null) {
-            return false;
-        }
-        LabOrder order = labOrderRepository.findById(orderId).orElse(null);
-        return canCancel(order);
+        return getCancellationBlockReason(orderId) == null;
     }
 
     /**
      * Returns true if the order can still be cancelled by reception.
      */
     public boolean canCancel(LabOrder order) {
-        if (order == null || order.getId() == null) {
-            return false;
+        return getCancellationBlockReason(order) == null;
+    }
+
+    /**
+     * Returns null when cancellation is allowed; otherwise returns a user-facing
+     * reason why cancellation is blocked.
+     */
+    public String getCancellationBlockReason(Long orderId) {
+        if (orderId == null) {
+            return "Order ID is required.";
         }
-        // if (!"PENDING".equals(order.getStatus())) {
-        // return false;
-        // }
-        // NEW: Allow cancellation if status is PENDING or COMPLETED
-        // But block if the report has already been delivered to the patient
+        LabOrder order = labOrderRepository.findById(orderId).orElse(null);
+        if (order == null) {
+            return "Order not found: " + orderId;
+        }
+        return getCancellationBlockReason(order);
+    }
+
+    /**
+     * Returns null when cancellation is allowed; otherwise returns a user-facing
+     * reason why cancellation is blocked.
+     */
+    public String getCancellationBlockReason(LabOrder order) {
+        if (order == null || order.getId() == null) {
+            return "Order not found.";
+        }
+
         if (order.getDeliveryDate() != null || order.isReportDelivered()) {
-            return false;
+            return "Order #" + order.getId() + " cannot be cancelled because report is already delivered.";
         }
 
         String status = order.getStatus();
-        if (!"PENDING".equals(status) && !"COMPLETED".equals(status)) {
-            return false;
+        if ("CANCELLED".equals(status)) {
+            return "Order #" + order.getId() + " is already cancelled.";
         }
-        return !hasLabWorkStarted(order);
+        if ("COMPLETED".equals(status)) {
+            return "Order #" + order.getId() + " is completed and cannot be cancelled.";
+        }
+        if (!"PENDING".equals(status) && !"IN_PROGRESS".equals(status)) {
+            return "Order #" + order.getId() + " cannot be cancelled from status: " + status + ".";
+        }
+        if (hasLabWorkStarted(order)) {
+            return "Order #" + order.getId() + " cannot be cancelled because lab work has already started.";
+        }
+        return null;
     }
 
     public boolean isCancellationKeyConfigured() {
@@ -126,26 +160,30 @@ public class OrderCancellationService {
     }
 
     /**
-     * Cancels a pending order before lab work starts and records refund.
+     * Cancels an eligible order (pending/in-progress with no lab activity), records
+     * refund if needed, and soft-marks the order as CANCELLED.
      */
     @Transactional
-    public CancellationResult cancelOrderAuthorized(Long orderId, String approvalKey) {
+    public CancellationResult cancelOrderAuthorized(Long orderId, String approvalKey, String cancellationReason) {
         if (!verifyCancellationKey(approvalKey)) {
             throw new SecurityException("Cancellation approver authorization is required.");
         }
+        String normalizedReason = normalizeReason(cancellationReason);
 
         LabOrder order = labOrderRepository.findById(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
 
-        if (!canCancel(order)) {
-            throw new IllegalStateException(
-                    "Order #" + order.getId() + " cannot be cancelled because lab work has already started.");
+        String blockReason = getCancellationBlockReason(order);
+        if (blockReason != null) {
+            throw new IllegalStateException(blockReason);
         }
 
         rollbackInventory(order);
-        deleteCommissionRow(order.getId());
+        voidCommissionForCancellation(order.getId());
 
         BigDecimal refundAmount = normalize(order.getPaidAmount());
+        String currentUsername = normalizeUsername(currentUserProvider.getUsername());
+        User actor = userRepository.findByUsername(currentUsername).orElse(null);
         if (refundAmount.compareTo(BigDecimal.ZERO) > 0) {
             Payment refund = new Payment();
             refund.setType("EXPENSE");
@@ -153,12 +191,19 @@ public class OrderCancellationService {
             refund.setDescription("Refund for cancelled order #" + order.getId());
             refund.setAmount(refundAmount);
             refund.setPaymentMethod("CASH");
-            refund.setRemarks("Auto-generated refund for pre-test cancellation");
+            refund.setRemarks("Auto-generated refund for cancelled order.");
             refund.setTransactionDate(LocalDateTime.now());
+            refund.setRecordedBy(actor);
             paymentRepository.save(refund);
         }
 
-        labOrderRepository.delete(order);
+        order.setStatus("CANCELLED");
+        order.setCancelledAt(LocalDateTime.now());
+        order.setCancelledBy(currentUsername);
+        order.setCancellationReason(normalizedReason);
+        order.setCancellationApprovalMethod("ADMIN_KEY");
+        order.setCancellationRefundAmount(refundAmount);
+        labOrderRepository.save(order);
         return new CancellationResult(orderId, refundAmount);
     }
 
@@ -197,7 +242,7 @@ public class OrderCancellationService {
         }
     }
 
-    private void deleteCommissionRow(Long orderId) {
+    private void voidCommissionForCancellation(Long orderId) {
         CommissionLedger ledger = commissionLedgerRepository.findByLabOrderId(orderId).orElse(null);
         if (ledger == null) {
             return;
@@ -212,7 +257,8 @@ public class OrderCancellationService {
                             + " cannot be cancelled because linked doctor commission has already been paid.");
         }
 
-        commissionLedgerRepository.delete(ledger);
+        ledger.setStatus("CANCELLED");
+        commissionLedgerRepository.save(ledger);
     }
 
     private boolean hasLabWorkStarted(LabOrder order) {
@@ -249,6 +295,19 @@ public class OrderCancellationService {
 
     private BigDecimal normalize(BigDecimal value) {
         return value != null ? value : BigDecimal.ZERO;
+    }
+
+    private String normalizeReason(String reason) {
+        String normalized = reason == null ? "" : reason.trim();
+        if (normalized.isEmpty()) {
+            throw new IllegalArgumentException("Cancellation reason is required.");
+        }
+        return normalized;
+    }
+
+    private String normalizeUsername(String username) {
+        String normalized = username == null ? "" : username.trim();
+        return normalized.isEmpty() ? "UNKNOWN" : normalized;
     }
 
     public record CancellationResult(Long orderId, BigDecimal refundAmount) {

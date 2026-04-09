@@ -86,6 +86,7 @@ public class OrderService {
             panels = panelRepo.findAllWithTestsById(panelIds);
             panelTests = panels.stream()
                     .flatMap(panel -> panel.getTests().stream())
+                    .filter(test -> Boolean.TRUE.equals(test.getActive()))
                     .toList();
         }
 
@@ -108,6 +109,7 @@ public class OrderService {
         java.util.Set<Long> panelTestIds = panels.stream()
                 .filter(panel -> panel.getPrice() != null)
                 .flatMap(panel -> panel.getTests().stream())
+                .filter(test -> Boolean.TRUE.equals(test.getActive()))
                 .map(TestDefinition::getId)
                 .collect(java.util.stream.Collectors.toSet());
 

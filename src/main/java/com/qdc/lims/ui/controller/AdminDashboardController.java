@@ -314,6 +314,11 @@ public class AdminDashboardController {
     }
 
     @FXML
+    private void handleCancelledOrdersReport() {
+        openAdminWindow("/fxml/cancelled_orders_report.fxml", "Cancelled Orders Report", 1200, 800);
+    }
+
+    @FXML
     private void handleDailyRevenue() {
         // Redirect to main revenue reports
         handleRevenueReports();

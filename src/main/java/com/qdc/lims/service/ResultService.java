@@ -59,6 +59,9 @@ public class ResultService {
         // 1. Fetch the specific result row
         LabResult result = repository.findById(request.resultId())
                 .orElseThrow(() -> new RuntimeException("Result ID not found"));
+        if (result.getLabOrder() != null && "CANCELLED".equals(result.getLabOrder().getStatus())) {
+            throw new RuntimeException("Cannot enter results for a cancelled order.");
+        }
 
         TestDefinition test = result.getTestDefinition();
 
@@ -102,6 +105,9 @@ public class ResultService {
         // 1. Security Check
         LabOrder labOrder = orderRepo.findById(orderForm.getId())
                 .orElseThrow(() -> new RuntimeException("The Order not found"));
+        if ("CANCELLED".equals(labOrder.getStatus())) {
+            throw new RuntimeException("Cannot modify results for a cancelled order.");
+        }
         if (labOrder.isReportDelivered()) {
             throw new RuntimeException("⛔ ILLEGAL ACTION: Cannot modify results after report delivery.");
         }
@@ -209,6 +215,9 @@ public class ResultService {
         LabOrder labOrder = orderRepo.findById(orderForm.getId())
                 .orElseThrow(() -> new RuntimeException("The Order not found"));
 
+        if ("CANCELLED".equals(labOrder.getStatus())) {
+            throw new RuntimeException("Cannot edit results for a cancelled order.");
+        }
         if (!"COMPLETED".equals(labOrder.getStatus())) {
             throw new RuntimeException("Only completed orders can be edited here.");
         }

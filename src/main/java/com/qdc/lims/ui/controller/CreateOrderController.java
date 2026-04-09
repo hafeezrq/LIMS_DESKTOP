@@ -158,7 +158,9 @@ public class CreateOrderController {
     }
 
     private void loadDoctors() {
-        List<Doctor> doctors = doctorRepository.findAll();
+        List<Doctor> doctors = doctorRepository.findByActiveTrue().stream()
+                .sorted(Comparator.comparing(Doctor::getName, String.CASE_INSENSITIVE_ORDER))
+                .collect(Collectors.toList());
 
         // Add a "None" option
         Doctor noneDoctor = new Doctor();

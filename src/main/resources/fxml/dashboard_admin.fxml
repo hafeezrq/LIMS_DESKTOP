@@ -55,6 +55,7 @@
                 
                 <Menu text="Finance &amp; Reports">
                     <MenuItem text="Revenue Reports" onAction="#handleRevenueReports"/>
+                    <MenuItem text="Cancelled Orders Report" onAction="#handleCancelledOrdersReport"/>
                     <MenuItem text="Payment History" onAction="#handlePaymentHistory"/>
                     <MenuItem text="Financial Queries" onAction="#handleFinancialQueries"/>
                     <MenuItem text="Expense Management" onAction="#handleExpenses"/>

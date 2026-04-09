@@ -136,6 +136,17 @@ public interface LabOrderRepository extends JpaRepository<LabOrder, Long> {
         List<LabOrder> findByOrderDateBetween(LocalDateTime start, LocalDateTime end);
 
         /**
+         * Finds cancelled orders within a cancellation timestamp range.
+         *
+         * @param status cancellation status (use "CANCELLED")
+         * @param start  inclusive start of cancellation timestamp
+         * @param end    inclusive end of cancellation timestamp
+         * @return cancelled orders sorted by latest cancellation first
+         */
+        List<LabOrder> findByStatusAndCancelledAtBetweenOrderByCancelledAtDesc(
+                        String status, LocalDateTime start, LocalDateTime end);
+
+        /**
          * Counts the number of orders within a specific date range.
          *
          * @param start the start of the order date range

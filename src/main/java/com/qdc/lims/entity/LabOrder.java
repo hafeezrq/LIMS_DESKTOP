@@ -82,6 +82,15 @@ public class LabOrder {
     @Column(precision = 19, scale = 4)
     private BigDecimal balanceDue = BigDecimal.ZERO; // e.g. 400 (Remaining)
     private LocalDateTime labStartedAt;
+    private LocalDateTime cancelledAt;
+    @Column(length = 100)
+    private String cancelledBy;
+    @Column(columnDefinition = "text")
+    private String cancellationReason;
+    @Column(length = 32)
+    private String cancellationApprovalMethod;
+    @Column(precision = 19, scale = 4)
+    private BigDecimal cancellationRefundAmount = BigDecimal.ZERO;
 
     // One Order = Many Tests (Results)
     // "CascadeType.ALL" means if we save the Order, it auto-saves the Result rows

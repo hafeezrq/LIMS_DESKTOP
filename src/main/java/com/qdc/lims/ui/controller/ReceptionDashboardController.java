@@ -78,6 +78,20 @@ import javafx.util.Duration;
 public class ReceptionDashboardController {
     private static final String REPORT_PATIENT_INFO_OFFSET_Y_MM = "REPORT_PATIENT_INFO_OFFSET_Y_MM";
     private static final double POINTS_PER_MM = 72.0 / 25.4;
+    private enum ReportPaperMode {
+        LETTERHEAD("Letterhead"),
+        BLANK_A4("Blank A4");
+
+        private final String label;
+
+        ReportPaperMode(String label) {
+            this.label = label;
+        }
+
+        private String label() {
+            return label;
+        }
+    }
 
     private final ApplicationContext applicationContext;
     private final LabOrderRepository labOrderRepository;
@@ -183,6 +197,8 @@ public class ReceptionDashboardController {
     private ObservableList<LabOrder> readyOrders = FXCollections.observableArrayList();
     private ObservableList<LabOrder> pendingOrders = FXCollections.observableArrayList();
     private ObservableList<LabOrder> deliveredOrders = FXCollections.observableArrayList();
+    private record CancellationApproval(String key, String reason) {
+    }
 
     public ReceptionDashboardController(ApplicationContext applicationContext,
             LabOrderRepository labOrderRepository,
@@ -407,21 +423,13 @@ public class ReceptionDashboardController {
 
         // 3. Add Actions
         ButtonType deliverBtn = new ButtonType("Deliver / Print", ButtonBar.ButtonData.OK_DONE);
-        ButtonType cancelBtn = new ButtonType("Cancel Order (Secure)", ButtonBar.ButtonData.LEFT);
-        dialog.getDialogPane().getButtonTypes().addAll(deliverBtn, cancelBtn, ButtonType.CLOSE);
-
-        // Style the Cancel button
-        Button cancelNode = (Button) dialog.getDialogPane().lookupButton(cancelBtn);
-        cancelNode.setStyle("-fx-background-color: #c0392b; -fx-text-fill: white;");
+        dialog.getDialogPane().getButtonTypes().addAll(deliverBtn, ButtonType.CLOSE);
 
         Optional<ButtonType> result = dialog.showAndWait();
 
         if (result.isPresent()) {
             if (result.get() == deliverBtn) {
                 deliverReport(order); // Your existing delivery flow
-            } else if (result.get() == cancelBtn) {
-                // This triggers your EXISTING method that prompts for Admin Password!
-                handleCancelOrder(order);
             }
         }
     }
@@ -471,12 +479,12 @@ public class ReceptionDashboardController {
                         return;
                     }
 
-                    boolean canCancel = orderCancellationService.canCancel(order);
-                    if (!canCancel) {
+                    String blockReason = orderCancellationService.getCancellationBlockReason(order);
+                    if (blockReason != null) {
                         cancelBtn.setDisable(true);
                         cancelBtn.setStyle(
                                 "-fx-background-color: #c0392b; -fx-text-fill: white; -fx-font-size: 11; -fx-padding: 3 10;");
-                        cancelBtn.setTooltip(new Tooltip("Cancellation disabled: lab work already in progress."));
+                        cancelBtn.setTooltip(new Tooltip(blockReason));
                         setGraphic(cancelBtn);
                         return;
                     }
@@ -676,8 +684,9 @@ public class ReceptionDashboardController {
             return;
         }
 
-        if (!orderCancellationService.canCancel(order.getId())) {
-            showError("Order #" + order.getId() + " cannot be cancelled because lab work has already started.");
+        String blockReason = orderCancellationService.getCancellationBlockReason(order.getId());
+        if (blockReason != null) {
+            showError(blockReason);
             loadOrders();
             return;
         }
@@ -694,14 +703,14 @@ public class ReceptionDashboardController {
         }
 
         try {
-            String approvalKey = promptCancellationApprovalKey();
-            if (approvalKey == null) {
+            CancellationApproval approval = promptCancellationApproval();
+            if (approval == null) {
                 return;
             }
 
             OrderCancellationService.CancellationResult result = orderCancellationService
-                    .cancelOrderAuthorized(order.getId(), approvalKey);
-            String message = "Order #" + result.orderId() + " cancelled and deleted successfully.";
+                    .cancelOrderAuthorized(order.getId(), approval.key(), approval.reason());
+            String message = "Order #" + result.orderId() + " cancelled successfully.";
             if (result.refundAmount() != null && result.refundAmount().compareTo(BigDecimal.ZERO) > 0) {
                 message += "\nRefund recorded: " + localeFormatService.formatCurrency(result.refundAmount());
             } else {
@@ -713,6 +722,9 @@ public class ReceptionDashboardController {
         } catch (SecurityException ex) {
             showError(ex.getMessage());
             loadOrders();
+        } catch (IllegalArgumentException ex) {
+            showError(ex.getMessage());
+            loadOrders();
         } catch (IllegalStateException ex) {
             showError(ex.getMessage());
             loadOrders();
@@ -721,15 +733,15 @@ public class ReceptionDashboardController {
         }
     }
 
-    private String promptCancellationApprovalKey() {
+    private CancellationApproval promptCancellationApproval() {
         if (!orderCancellationService.isCancellationKeyConfigured()) {
             showError("Cancellation key is not configured. Ask admin to set it from Admin menu.");
             return null;
         }
 
-        Dialog<String> dialog = new Dialog<>();
+        Dialog<CancellationApproval> dialog = new Dialog<>();
         dialog.setTitle("Cancellation Key Required");
-        dialog.setHeaderText("Enter admin cancellation key to approve this order cancellation.");
+        dialog.setHeaderText("Enter admin cancellation key and cancellation reason.");
 
         ButtonType approveButtonType = new ButtonType("Approve", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(approveButtonType, ButtonType.CANCEL);
@@ -738,12 +750,19 @@ public class ReceptionDashboardController {
         keyField.setPromptText("Cancellation key");
         keyField.setPrefWidth(260);
 
+        TextArea reasonArea = new TextArea();
+        reasonArea.setPromptText("Reason for cancellation (required)");
+        reasonArea.setPrefRowCount(3);
+        reasonArea.setWrapText(true);
+
         Label errorLabel = new Label();
         errorLabel.setStyle("-fx-text-fill: #c0392b;");
 
         VBox content = new VBox(10,
                 new Label("This operation requires admin cancellation key."),
                 keyField,
+                new Label("Cancellation reason"),
+                reasonArea,
                 errorLabel);
         content.setPadding(new Insets(15));
         dialog.getDialogPane().setContent(content);
@@ -751,7 +770,11 @@ public class ReceptionDashboardController {
         Button approveButton = (Button) dialog.getDialogPane().lookupButton(approveButtonType);
         approveButton.setDisable(true);
         approveButton.setStyle("-fx-background-color: #d35400; -fx-text-fill: white;");
-        keyField.textProperty().addListener((obs, oldVal, newVal) -> approveButton.setDisable(newVal.trim().isEmpty()));
+        Runnable updateApproveState = () -> approveButton
+                .setDisable(keyField.getText().trim().isEmpty() || reasonArea.getText().trim().isEmpty());
+        keyField.textProperty().addListener((obs, oldVal, newVal) -> updateApproveState.run());
+        reasonArea.textProperty().addListener((obs, oldVal, newVal) -> updateApproveState.run());
+        updateApproveState.run();
 
         keyField.setOnAction(e -> {
             if (!approveButton.isDisabled()) {
@@ -776,7 +799,13 @@ public class ReceptionDashboardController {
                 event.consume();
                 return;
             }
-            dialog.setResult(key.trim());
+            String reason = reasonArea.getText() != null ? reasonArea.getText().trim() : "";
+            if (reason.isEmpty()) {
+                errorLabel.setText("Cancellation reason is required.");
+                event.consume();
+                return;
+            }
+            dialog.setResult(new CancellationApproval(key.trim(), reason));
         });
 
         dialog.setResultConverter(button -> button == approveButtonType ? dialog.getResult() : null);
@@ -786,8 +815,8 @@ public class ReceptionDashboardController {
 
     private String buildCancellationConfirmationText(Long orderId, BigDecimal refundAmount) {
         StringBuilder text = new StringBuilder();
-        text.append("This will permanently delete order #").append(orderId).append(".\n");
-        text.append("Use this only when lab has not started work.");
+        text.append("This will cancel order #").append(orderId).append(" (no hard delete).\n");
+        text.append("Order history and cancellation audit will be preserved.");
         if (refundAmount != null && refundAmount.compareTo(BigDecimal.ZERO) > 0) {
             text.append("\n\nA refund expense will be recorded: ")
                     .append(localeFormatService.formatCurrency(refundAmount));
@@ -1059,6 +1088,18 @@ public class ReceptionDashboardController {
         content.getChildren().add(new Label("MRN: " + patientMrn));
         content.getChildren().add(new Separator());
 
+        Label paperModeLabel = new Label("Print Format:");
+        paperModeLabel.setStyle("-fx-font-weight: bold;");
+        ToggleGroup paperModeGroup = new ToggleGroup();
+        RadioButton letterheadModeRadio = new RadioButton("Use pre-printed letterhead");
+        letterheadModeRadio.setToggleGroup(paperModeGroup);
+        letterheadModeRadio.setUserData(ReportPaperMode.LETTERHEAD);
+        letterheadModeRadio.setSelected(true);
+        RadioButton blankA4ModeRadio = new RadioButton("Print on blank A4 sheet");
+        blankA4ModeRadio.setToggleGroup(paperModeGroup);
+        blankA4ModeRadio.setUserData(ReportPaperMode.BLANK_A4);
+        content.getChildren().addAll(paperModeLabel, letterheadModeRadio, blankA4ModeRadio, new Separator());
+
         String paymentStatus = (freshOrder.getBalanceDue() == null
                 || freshOrder.getBalanceDue().compareTo(java.math.BigDecimal.ZERO) <= 0)
                         ? "FULLY PAID"
@@ -1136,7 +1177,8 @@ public class ReceptionDashboardController {
                     showError("Select at least one department to preview.");
                     continue;
                 }
-                showReportPreview(freshOrder, selected, dialogOwner);
+                ReportPaperMode paperMode = resolveSelectedPaperMode(paperModeGroup);
+                showReportPreview(freshOrder, selected, dialogOwner, paperMode);
                 continue;
             }
 
@@ -1146,7 +1188,8 @@ public class ReceptionDashboardController {
                     showError("Select at least one department to print.");
                     continue;
                 }
-                if (!printReport(freshOrder, selected)) {
+                ReportPaperMode paperMode = resolveSelectedPaperMode(paperModeGroup);
+                if (!printReport(freshOrder, selected, paperMode)) {
                     continue;
                 }
 
@@ -1210,11 +1253,11 @@ public class ReceptionDashboardController {
         }
     }
 
-    private boolean printReport(LabOrder order, List<String> selectedDepartments) {
+    private boolean printReport(LabOrder order, List<String> selectedDepartments, ReportPaperMode paperMode) {
         PrinterJob job = PrinterJob.createPrinterJob();
         if (job != null && job.showPrintDialog(mainContainer.getScene().getWindow())) {
             PageLayout pageLayout = job.getJobSettings().getPageLayout();
-            List<StackPane> pages = buildReportPages(order, pageLayout, selectedDepartments);
+            List<StackPane> pages = buildReportPages(order, pageLayout, selectedDepartments, paperMode);
             if (pages.isEmpty()) {
                 showError("No printable results found for selected department(s).");
                 return false;
@@ -1238,13 +1281,15 @@ public class ReceptionDashboardController {
         return false;
     }
 
-    private List<StackPane> buildReportPages(LabOrder order, PageLayout pageLayout, List<String> selectedDepartments) {
+    private List<StackPane> buildReportPages(LabOrder order, PageLayout pageLayout, List<String> selectedDepartments,
+            ReportPaperMode paperMode) {
         double printableWidth = pageLayout.getPrintableWidth();
         double printableHeight = pageLayout.getPrintableHeight();
-        // Reserve space for pre-printed letterhead: 5.5 cm from the top.
-        double topInset = (5.5 / 2.54) * 72.0;
-        double safeTopInset = Math.min(topInset, printableHeight * 0.35);
-        double bottomInset = 1.5 * 72.0;
+        boolean letterheadMode = paperMode == ReportPaperMode.LETTERHEAD;
+        // Letterhead mode reserves space for pre-printed branding.
+        double topInset = letterheadMode ? (5.5 / 2.54) * 72.0 : 0.75 * 72.0;
+        double safeTopInset = letterheadMode ? Math.min(topInset, printableHeight * 0.35) : topInset;
+        double bottomInset = letterheadMode ? 1.5 * 72.0 : 0.75 * 72.0;
         double contentWidth = Math.min(620, printableWidth * 0.9);
         double availableHeight = printableHeight - safeTopInset - bottomInset;
         // double headerInset = 36.0;
@@ -1276,16 +1321,25 @@ public class ReceptionDashboardController {
         patientInfo.add(createReportLabel(localeFormatService.formatDateTime(order.getOrderDate())), 1, row++);
         patientInfo.add(createReportLabel("Printed:"), 0, row);
         patientInfo.add(createReportLabel(localeFormatService.formatDateTime(LocalDateTime.now())), 1, row++);
-        patientInfo.add(createReportLabel("Referred By:"), 0, row);
-        patientInfo.add(createReportLabel(order.getReferringDoctor() != null
-                ? order.getReferringDoctor().getName()
-                : "-"), 1, row++);
+        String referredBy = order.getReferringDoctor() != null && order.getReferringDoctor().getName() != null
+                ? order.getReferringDoctor().getName().trim()
+                : "";
+        if (!referredBy.isBlank()) {
+            patientInfo.add(createReportLabel("Referred By:"), 0, row);
+            patientInfo.add(createReportLabel(referredBy), 1, row++);
+        }
 
         List<StackPane> pages = new ArrayList<>();
         PageContext pageContext = newPage(pages, printableWidth, printableHeight, safeTopInset, bottomInset,
                 contentWidth, availableHeight);
-        attachPatientHeader(pages.get(pages.size() - 1), patientInfo, printableWidth, pageLayout);
-        addNodeToPage(pageContext, createSpacer(6), contentWidth);
+        if (letterheadMode) {
+            attachPatientHeader(pages.get(pages.size() - 1), patientInfo, printableWidth, pageLayout);
+            addNodeToPage(pageContext, createSpacer(6), contentWidth);
+        } else {
+            VBox blankHeader = createBlankPaperHeader(order, patientInfo, contentWidth);
+            addNodeToPage(pageContext, blankHeader, contentWidth);
+            addNodeToPage(pageContext, createSpacer(6), contentWidth);
+        }
 
         Map<String, List<LabResult>> byDepartment = buildResultsByDepartment(order, selectedDepartments);
         for (Map.Entry<String, List<LabResult>> entry : byDepartment.entrySet()) {
@@ -1362,14 +1416,15 @@ public class ReceptionDashboardController {
                 + " | State: " + state);
     }
 
-    private void showReportPreview(LabOrder order, List<String> selectedDepartments, Window ownerWindow) {
+    private void showReportPreview(LabOrder order, List<String> selectedDepartments, Window ownerWindow,
+            ReportPaperMode paperMode) {
         PageLayout previewLayout = resolvePreviewPageLayout();
         if (previewLayout == null) {
             showError("Preview unavailable: no printer/page layout found.");
             return;
         }
 
-        List<StackPane> pages = buildReportPages(order, previewLayout, selectedDepartments);
+        List<StackPane> pages = buildReportPages(order, previewLayout, selectedDepartments, paperMode);
         if (pages.isEmpty()) {
             showError("No printable results found for selected department(s).");
             return;
@@ -1420,7 +1475,8 @@ public class ReceptionDashboardController {
         scrollPane.setPannable(true);
 
         Label header = new Label(
-                "Preview - Order #" + order.getId() + " (" + String.join(", ", selectedDepartments) + ")");
+                "Preview - Order #" + order.getId() + " (" + String.join(", ", selectedDepartments) + ")"
+                        + " | Format: " + paperMode.label());
         header.setStyle("-fx-font-size: 14; -fx-font-weight: bold;");
 
         BorderPane root = new BorderPane();
@@ -1652,6 +1708,36 @@ public class ReceptionDashboardController {
 
         // 4. Add the box to the page StackPane
         page.getChildren().add(patientInfo);
+    }
+
+    private VBox createBlankPaperHeader(LabOrder order, GridPane patientInfo, double contentWidth) {
+        Label reportTitle = new Label(brandingService.getReportHeaderText());
+        reportTitle.setStyle("-fx-font-size: 12; -fx-font-weight: bold;");
+        Label orderLabel = new Label("Order #" + order.getId());
+        orderLabel.setStyle("-fx-font-size: 9;");
+
+        double patientBoxWidth = Math.min(contentWidth, 460);
+        patientInfo.setPrefWidth(patientBoxWidth);
+        patientInfo.setMaxWidth(patientBoxWidth);
+
+        Separator separator = new Separator();
+        separator.setPrefWidth(contentWidth);
+
+        VBox header = new VBox(4, reportTitle, orderLabel, patientInfo, separator);
+        header.setAlignment(Pos.TOP_CENTER);
+        header.setPrefWidth(contentWidth);
+        return header;
+    }
+
+    private ReportPaperMode resolveSelectedPaperMode(ToggleGroup paperModeGroup) {
+        if (paperModeGroup == null || paperModeGroup.getSelectedToggle() == null) {
+            return ReportPaperMode.LETTERHEAD;
+        }
+        Object selected = paperModeGroup.getSelectedToggle().getUserData();
+        if (selected instanceof ReportPaperMode mode) {
+            return mode;
+        }
+        return ReportPaperMode.LETTERHEAD;
     }
 
     private double resolvePatientInfoOffsetYPoints() {

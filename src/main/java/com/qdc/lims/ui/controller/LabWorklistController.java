@@ -251,6 +251,7 @@ public class LabWorklistController {
         // Do not show orders that have no tests/results attached.
         List<LabOrder> filteredOrders = allOrders.stream()
                 .filter(this::hasActualLabTests)
+                .filter(order -> !"CANCELLED".equals(order.getStatus()))
                 .collect(Collectors.toList());
 
         if (pendingRadio.isSelected()) {
@@ -310,6 +311,7 @@ public class LabWorklistController {
         // 1. Filter the entire list once to only look at Lab Orders
         List<LabOrder> labOnlyOrders = allOrders.stream()
                 .filter(this::hasActualLabTests)
+                .filter(order -> !"CANCELLED".equals(order.getStatus()))
                 .collect(Collectors.toList());
 
         // 2. Count Pending
@@ -420,8 +422,7 @@ public class LabWorklistController {
         boolean lockAcquired = false;
         try {
             if (manageLock) {
-                orderCancellationService.markUnderLabReview(order.getId());
-                lockAcquired = true;
+                lockAcquired = orderCancellationService.markUnderLabReview(order.getId());
             }
 
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/result_entry.fxml"));
