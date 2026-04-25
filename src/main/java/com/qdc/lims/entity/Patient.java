@@ -40,6 +40,7 @@ public class Patient {
     @NotNull(message = "Age is required")
     @Column(nullable = false)
     private Integer age; // Stores years (e.g., 25)
+    private String ageUnit; // "Years", "Months", or "Days"
 
     private String city; // e.g., "Lahore", "Village 45GB"
 

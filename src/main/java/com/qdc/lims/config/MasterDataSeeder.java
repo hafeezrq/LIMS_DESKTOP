@@ -253,7 +253,7 @@ public class MasterDataSeeder implements ApplicationRunner {
             if (rangeSeed == null || (isBlank(rangeSeed.testShortCode) && isBlank(rangeSeed.testName))) {
                 continue;
             }
-            if (rangeSeed.minVal == null || rangeSeed.maxVal == null) {
+            if ((rangeSeed.minVal == null || rangeSeed.maxVal == null) && isBlank(rangeSeed.referenceText)) {
                 continue;
             }
 
@@ -281,6 +281,7 @@ public class MasterDataSeeder implements ApplicationRunner {
             range.setMaxAge(rangeSeed.maxAge);
             range.setMinVal(rangeSeed.minVal);
             range.setMaxVal(rangeSeed.maxVal);
+            range.setReferenceText(rangeSeed.referenceText);
             referenceRangeRepository.save(range);
         }
 
@@ -430,6 +431,7 @@ public class MasterDataSeeder implements ApplicationRunner {
         public Integer maxAge;
         public BigDecimal minVal;
         public BigDecimal maxVal;
+        public String referenceText;
     }
 
     public static class RecipeSeed {

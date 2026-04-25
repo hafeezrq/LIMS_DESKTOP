@@ -146,7 +146,7 @@ public class CreateOrderController {
             // Display patient info
             patientNameLabel.setText(patient.getFullName() + " (MRN: " + patient.getMrn() + ")");
             patientDetailsLabel.setText(
-                    "Age: " + patient.getAge() + " | " +
+                    "Age: " + localeFormatService.formatAge(patient.getAge(), patient.getAgeUnit()) + " | " +
                             "Gender: " + patient.getGender() + " | " +
                             "Mobile: " + (patient.getMobileNumber() != null ? patient.getMobileNumber() : "N/A") + " | "
                             +
@@ -535,7 +535,7 @@ public class CreateOrderController {
         selectedPatient = patient;
         patientNameLabel.setText(patient.getFullName() + " (MRN: " + patient.getMrn() + ")");
         patientDetailsLabel.setText(
-                "Age: " + patient.getAge() + " | " +
+                "Age: " + localeFormatService.formatAge(patient.getAge(), patient.getAgeUnit()) + " | " +
                         "Gender: " + patient.getGender() + " | " +
                         "Mobile: " + (patient.getMobileNumber() != null ? patient.getMobileNumber() : "N/A") + " | " +
                         "City: " + (patient.getCity() != null ? patient.getCity() : "N/A"));
@@ -800,7 +800,9 @@ public class CreateOrderController {
         sb.append("--- PATIENT DETAILS ---\n");
         sb.append("Name: ").append(order.getPatient().getFullName()).append("\n");
         sb.append("MRN: ").append(order.getPatient().getMrn()).append("\n");
-        sb.append("Age/Gender: ").append(order.getPatient().getAge()).append(" / ")
+        sb.append("Age/Gender: ")
+                .append(localeFormatService.formatAge(order.getPatient().getAge(), order.getPatient().getAgeUnit()))
+                .append(" / ")
                 .append(order.getPatient().getGender()).append("\n\n");
         java.util.Set<Long> panelTestIds = getPanelTestIds(order);
 
@@ -864,7 +866,7 @@ public class CreateOrderController {
         // Patient - abbreviated
         sb.append("Patient: ").append(truncate(order.getPatient().getFullName(), 20)).append("\n");
         sb.append("MRN: ").append(order.getPatient().getMrn()).append("\n");
-        sb.append("Age: ").append(order.getPatient().getAge())
+        sb.append("Age: ").append(localeFormatService.formatAge(order.getPatient().getAge(), order.getPatient().getAgeUnit()))
                 .append(" | ").append(order.getPatient().getGender()).append("\n");
         sb.append("--------------------------------\n");
 

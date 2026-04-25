@@ -73,6 +73,10 @@ public class ReportService {
             Font normalFont = FontFactory.getFont(FontFactory.HELVETICA, 12);
             document.add(new Paragraph("Patient Name: " + patient.getFullName(), normalFont));
             document.add(new Paragraph("MRN: " + patient.getMrn(), normalFont));
+            document.add(new Paragraph("Age/Gender: "
+                    + localeFormatService.formatAge(patient.getAge(), patient.getAgeUnit())
+                    + " / "
+                    + (patient.getGender() != null ? patient.getGender() : "-"), normalFont));
             document.add(new Paragraph("Date: " + localeFormatService.formatDate(order.getOrderDate().toLocalDate()),
                     normalFont));
             document.add(new Paragraph("\n"));
@@ -192,6 +196,9 @@ public class ReportService {
         BigDecimal max = testDefinition.getMaxRange();
         ReferenceRange range = findMatchingRange(testDefinition, patient);
         if (range != null) {
+            if (range.getReferenceText() != null && !range.getReferenceText().trim().isEmpty()) {
+                return range.getReferenceText().trim();
+            }
             min = range.getMinVal();
             max = range.getMaxVal();
         }
@@ -209,7 +216,7 @@ public class ReportService {
         if (ranges == null || ranges.isEmpty()) {
             return null;
         }
-        Integer age = patient != null ? patient.getAge() : null;
+        Integer age = toAgeInYears(patient);
         String gender = patient != null ? patient.getGender() : null;
 
         return ranges.stream()
@@ -269,6 +276,21 @@ public class ReportService {
             return 1;
         }
         return 0;
+    }
+
+    private Integer toAgeInYears(Patient patient) {
+        if (patient == null || patient.getAge() == null) {
+            return null;
+        }
+        int age = patient.getAge();
+        String ageUnit = patient.getAgeUnit();
+        if (ageUnit != null && ageUnit.equalsIgnoreCase("Months")) {
+            return Math.max(0, age / 12);
+        }
+        if (ageUnit != null && ageUnit.equalsIgnoreCase("Days")) {
+            return 0;
+        }
+        return age;
     }
 
     private void addLabContactDetails(Document document) throws DocumentException {

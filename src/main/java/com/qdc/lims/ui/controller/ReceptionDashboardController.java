@@ -1297,7 +1297,7 @@ public class ReceptionDashboardController {
         Patient patient = order.getPatient();
         String patientName = patient != null && patient.getFullName() != null ? patient.getFullName() : "-";
         String patientMrn = patient != null && patient.getMrn() != null ? patient.getMrn() : "-";
-        String patientAge = patient != null ? String.valueOf(patient.getAge()) : "-";
+        String patientAge = patient != null ? localeFormatService.formatAge(patient.getAge(), patient.getAgeUnit()) : "-";
         String patientGender = patient != null && patient.getGender() != null ? patient.getGender() : "-";
 
         GridPane patientInfo = new GridPane();
@@ -1789,11 +1789,14 @@ public class ReceptionDashboardController {
         if (test == null) {
             return "-";
         }
-        Integer age = patient != null ? patient.getAge() : null;
+        Integer age = toAgeInYears(patient);
         String gender = patient != null ? patient.getGender() : null;
 
         ReferenceRange matchingRange = findMatchingRange(test, age, gender);
         if (matchingRange != null) {
+            if (matchingRange.getReferenceText() != null && !matchingRange.getReferenceText().trim().isEmpty()) {
+                return matchingRange.getReferenceText().trim();
+            }
             String min = matchingRange.getMinVal() != null
                     ? localeFormatService.formatNumber(matchingRange.getMinVal())
                     : null;
@@ -1889,6 +1892,21 @@ public class ReceptionDashboardController {
             return "≤ " + max;
         }
         return "-";
+    }
+
+    private Integer toAgeInYears(Patient patient) {
+        if (patient == null || patient.getAge() == null) {
+            return null;
+        }
+        int age = patient.getAge();
+        String ageUnit = patient.getAgeUnit();
+        if (ageUnit != null && ageUnit.equalsIgnoreCase("Months")) {
+            return Math.max(0, age / 12);
+        }
+        if (ageUnit != null && ageUnit.equalsIgnoreCase("Days")) {
+            return 0;
+        }
+        return age;
     }
 
     private Label createReportLabel(String text) {

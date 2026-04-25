@@ -1,3 +1,6 @@
 target/
 scripts/windows/setup-lims.ps1
 .vscode/settings.json
+docs/BRD.md
+docs/REQUIREMENTS_SPECIFICATION.md
+docs/SRS.md

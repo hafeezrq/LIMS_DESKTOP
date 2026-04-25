@@ -37,11 +37,14 @@
                         
                         <!-- Age -->
                         <Label text="Age *" GridPane.columnIndex="0" GridPane.rowIndex="2" style="-fx-font-weight: bold;"/>
-                        <Spinner fx:id="ageSpinner" editable="true" GridPane.columnIndex="1" GridPane.rowIndex="2" prefWidth="150">
-                            <valueFactory>
-                                <SpinnerValueFactory.IntegerSpinnerValueFactory min="1" max="150" initialValue="1"/>
-                            </valueFactory>
-                        </Spinner>
+                        <HBox spacing="10" GridPane.columnIndex="1" GridPane.rowIndex="2">
+                            <Spinner fx:id="ageSpinner" editable="true" prefWidth="150">
+                                <valueFactory>
+                                    <SpinnerValueFactory.IntegerSpinnerValueFactory min="1" max="150" initialValue="1"/>
+                                </valueFactory>
+                            </Spinner>
+                            <ComboBox fx:id="ageUnitCombo" prefWidth="140" promptText="Unit"/>
+                        </HBox>
                         
                         <!-- Gender -->
                         <Label text="Gender" GridPane.columnIndex="0" GridPane.rowIndex="3" style="-fx-font-weight: bold;"/>

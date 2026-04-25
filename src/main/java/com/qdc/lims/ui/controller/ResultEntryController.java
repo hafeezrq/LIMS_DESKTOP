@@ -153,6 +153,9 @@ public class ResultEntryController {
         referenceRangeColumn.setCellValueFactory(cellData -> {
             TestDefinition test = cellData.getValue().getTestDefinition();
             ReferenceRange range = findMatchingRange(test, currentOrder != null ? currentOrder.getPatient() : null);
+            if (range != null && range.getReferenceText() != null && !range.getReferenceText().trim().isEmpty()) {
+                return new SimpleStringProperty(range.getReferenceText().trim());
+            }
             if (range == null) {
                 return new SimpleStringProperty("N/A");
             }
@@ -444,7 +447,8 @@ public class ResultEntryController {
 
         mrnLabel.setText(currentOrder.getPatient().getMrn());
         nameLabel.setText(currentOrder.getPatient().getFullName());
-        ageGenderLabel.setText(currentOrder.getPatient().getAge() + " / " + currentOrder.getPatient().getGender());
+        ageGenderLabel.setText(localeFormatService.formatAge(currentOrder.getPatient().getAge(),
+                currentOrder.getPatient().getAgeUnit()) + " / " + currentOrder.getPatient().getGender());
         orderDateLabel.setText(localeFormatService.formatDateTime(currentOrder.getOrderDate()));
 
         List<LabResult> sortedResults = currentOrder.getResults() == null
@@ -613,7 +617,10 @@ public class ResultEntryController {
             ReferenceRange range = findMatchingRange(result.getTestDefinition(),
                     currentOrder != null ? currentOrder.getPatient() : null);
 
-            if (range != null && range.getMinVal() != null && range.getMaxVal() != null) {
+            if (range != null
+                    && (range.getReferenceText() == null || range.getReferenceText().trim().isEmpty())
+                    && range.getMinVal() != null
+                    && range.getMaxVal() != null) {
                 if (numValue.compareTo(range.getMinVal()) < 0) {
                     result.setAbnormal(true);
                     result.setRemarks("LOW");
@@ -624,6 +631,9 @@ public class ResultEntryController {
                     result.setAbnormal(false);
                     result.setRemarks("Normal");
                 }
+            } else {
+                result.setAbnormal(false);
+                result.setRemarks("");
             }
         } catch (NumberFormatException e) {
             result.setAbnormal(false);
@@ -640,7 +650,7 @@ public class ResultEntryController {
             return null;
         }
 
-        Integer age = patient != null ? patient.getAge() : null;
+        Integer age = toAgeInYears(patient);
         String gender = patient != null ? patient.getGender() : null;
 
         return ranges.stream()
@@ -682,6 +692,21 @@ public class ResultEntryController {
             return 1;
         }
         return 0;
+    }
+
+    private Integer toAgeInYears(com.qdc.lims.entity.Patient patient) {
+        if (patient == null || patient.getAge() == null) {
+            return null;
+        }
+        int age = patient.getAge();
+        String ageUnit = patient.getAgeUnit();
+        if (ageUnit != null && ageUnit.equalsIgnoreCase("Months")) {
+            return Math.max(0, age / 12);
+        }
+        if (ageUnit != null && ageUnit.equalsIgnoreCase("Days")) {
+            return 0;
+        }
+        return age;
     }
 
     @FXML

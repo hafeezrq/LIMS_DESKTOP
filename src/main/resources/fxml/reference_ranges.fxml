@@ -65,6 +65,9 @@
                 
                 <Label text="Value (Max):" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
                 <TextField fx:id="maxValField" promptText="Upper Limit" prefWidth="80" GridPane.rowIndex="4" GridPane.columnIndex="1"/>
+
+                <Label text="Text Reference:" GridPane.rowIndex="5" GridPane.columnIndex="0"/>
+                <TextField fx:id="referenceTextField" promptText="Optional text range" prefWidth="180" GridPane.rowIndex="5" GridPane.columnIndex="1"/>
             </GridPane>
             
             <VBox spacing="10">

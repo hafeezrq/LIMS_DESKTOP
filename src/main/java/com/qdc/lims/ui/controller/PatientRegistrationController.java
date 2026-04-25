@@ -28,6 +28,9 @@ public class PatientRegistrationController {
     private Spinner<Integer> ageSpinner;
 
     @FXML
+    private ComboBox<String> ageUnitCombo;
+
+    @FXML
     private RadioButton maleRadio;
 
     @FXML
@@ -62,6 +65,8 @@ public class PatientRegistrationController {
         ageSpinner.getValueFactory().setValue(1);
         ageSpinner.getEditor().clear();
         ageSpinner.getEditor().setPromptText("Enter age");
+        ageUnitCombo.getItems().setAll("Years", "Months", "Days");
+        ageUnitCombo.setValue("Years");
 
         // Add Enter key support for all text fields
         fullNameField.setOnKeyPressed(event -> {
@@ -163,6 +168,7 @@ public class PatientRegistrationController {
         patient.setFullName(fullName);
         patient.setCnic(cnicField.getText().trim());
         patient.setAge(age);
+        patient.setAgeUnit(ageUnitCombo.getValue() != null ? ageUnitCombo.getValue() : "Years");
         patient.setGender(gender);
         patient.setMobileNumber(mobileField.getText().trim());
         patient.setCity(cityField.getText().trim());
@@ -201,6 +207,7 @@ public class PatientRegistrationController {
         cnicField.clear();
         ageSpinner.getValueFactory().setValue(1);
         ageSpinner.getEditor().clear();
+        ageUnitCombo.setValue("Years");
         genderGroup.selectToggle(null); // Deselect all gender options
         mobileField.clear();
         cityField.clear();

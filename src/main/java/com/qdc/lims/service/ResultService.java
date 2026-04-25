@@ -73,7 +73,10 @@ public class ResultService {
             java.math.BigDecimal val = new java.math.BigDecimal(request.value());
 
             ReferenceRange matchingRule = findMatchingRange(test, result.getLabOrder().getPatient());
-            if (matchingRule != null && matchingRule.getMinVal() != null && matchingRule.getMaxVal() != null) {
+            if (matchingRule != null
+                    && (matchingRule.getReferenceText() == null || matchingRule.getReferenceText().trim().isEmpty())
+                    && matchingRule.getMinVal() != null
+                    && matchingRule.getMaxVal() != null) {
                 if (val.compareTo(matchingRule.getMinVal()) < 0) {
                     result.setAbnormal(true);
                     result.setRemarks("LOW");
@@ -84,6 +87,9 @@ public class ResultService {
                     result.setAbnormal(false);
                     result.setRemarks("Normal");
                 }
+            } else {
+                result.setAbnormal(false);
+                result.setRemarks("");
             }
         } catch (NumberFormatException e) {
             // If the result is text (e.g., "Positive"), we can't check ranges
@@ -151,6 +157,8 @@ public class ResultService {
 
                     // 5. Apply High/Low Logic
                     if (matchingRule != null
+                            && (matchingRule.getReferenceText() == null
+                                    || matchingRule.getReferenceText().trim().isEmpty())
                             && matchingRule.getMinVal() != null
                             && matchingRule.getMaxVal() != null) {
                         if (numVal.compareTo(matchingRule.getMinVal()) < 0) {
@@ -252,6 +260,8 @@ public class ResultService {
                     ReferenceRange matchingRule = findMatchingRange(test, patient);
 
                     if (matchingRule != null
+                            && (matchingRule.getReferenceText() == null
+                                    || matchingRule.getReferenceText().trim().isEmpty())
                             && matchingRule.getMinVal() != null
                             && matchingRule.getMaxVal() != null) {
                         if (numVal.compareTo(matchingRule.getMinVal()) < 0) {
@@ -339,7 +349,7 @@ public class ResultService {
         if (ranges == null || ranges.isEmpty()) {
             return null;
         }
-        Integer age = patient != null ? patient.getAge() : null;
+        Integer age = toAgeInYears(patient);
         String gender = patient != null ? patient.getGender() : null;
 
         return ranges.stream()
@@ -399,6 +409,21 @@ public class ResultService {
             return 1;
         }
         return 0;
+    }
+
+    private Integer toAgeInYears(com.qdc.lims.entity.Patient patient) {
+        if (patient == null || patient.getAge() == null) {
+            return null;
+        }
+        int age = patient.getAge();
+        String ageUnit = patient.getAgeUnit();
+        if (ageUnit != null && ageUnit.equalsIgnoreCase("Months")) {
+            return Math.max(0, age / 12);
+        }
+        if (ageUnit != null && ageUnit.equalsIgnoreCase("Days")) {
+            return 0;
+        }
+        return age;
     }
 
 }

@@ -27,4 +27,5 @@ public class ReferenceRange {
 
     private java.math.BigDecimal minVal; // The Low Limit
     private java.math.BigDecimal maxVal; // The High Limit
+    private String referenceText; // Optional textual reference (e.g. "Pale white - Creamy white")
 }

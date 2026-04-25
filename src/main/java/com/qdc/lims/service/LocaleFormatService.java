@@ -104,6 +104,17 @@ public class LocaleFormatService {
         return dateTime.format(dateTimeFormatter);
     }
 
+    public String formatAge(Integer age, String ageUnit) {
+        if (age == null) {
+            return "-";
+        }
+        String normalizedUnit = ageUnit != null ? ageUnit.trim() : "";
+        if (normalizedUnit.isEmpty()) {
+            normalizedUnit = "Years";
+        }
+        return age + " " + normalizedUnit;
+    }
+
     public StringConverter<LocalDate> createDateConverter() {
         return new StringConverter<>() {
             @Override

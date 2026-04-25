@@ -29,6 +29,11 @@
       "name": "Microbiology",
       "code": "MIC",
       "active": true
+    },
+    {
+      "name": "Semen Analysis",
+      "code": "SEM",
+      "active": true
     }
   ],
   "categories": [
@@ -168,6 +173,12 @@
       "name": "Culture & Sensitivity",
       "department": "Microbiology",
       "description": "Cultures",
+      "active": true
+    },
+    {
+      "name": "Semen Analysis",
+      "department": "Semen Analysis",
+      "description": "Routine semen analysis profile",
       "active": true
     }
   ],
@@ -1110,6 +1121,149 @@
       "minRange": null,
       "maxRange": null,
       "active": true
+    },
+    {
+      "name": "Sample Collection",
+      "shortCode": "SEM-COLL",
+      "department": "Semen Analysis",
+      "category": "Semen Analysis",
+      "unit": null,
+      "price": 50,
+      "minRange": null,
+      "maxRange": null,
+      "active": true
+    },
+    {
+      "name": "Duration of Abstinence",
+      "shortCode": "SEM-ABS",
+      "department": "Semen Analysis",
+      "category": "Semen Analysis",
+      "unit": "days",
+      "price": 50,
+      "minRange": null,
+      "maxRange": null,
+      "active": true
+    },
+    {
+      "name": "Time of Sample Production",
+      "shortCode": "SEM-TSP",
+      "department": "Semen Analysis",
+      "category": "Semen Analysis",
+      "unit": "HH:mm",
+      "price": 50,
+      "minRange": null,
+      "maxRange": null,
+      "active": true
+    },
+    {
+      "name": "Analysis Time",
+      "shortCode": "SEM-AT",
+      "department": "Semen Analysis",
+      "category": "Semen Analysis",
+      "unit": "HH:mm",
+      "price": 50,
+      "minRange": null,
+      "maxRange": null,
+      "active": true
+    },
+    {
+      "name": "Colour",
+      "shortCode": "SEM-COL",
+      "department": "Semen Analysis",
+      "category": "Semen Analysis",
+      "unit": null,
+      "price": 75,
+      "minRange": null,
+      "maxRange": null,
+      "active": true
+    },
+    {
+      "name": "Volume",
+      "shortCode": "SEM-VOL",
+      "department": "Semen Analysis",
+      "category": "Semen Analysis",
+      "unit": "mL",
+      "price": 75,
+      "minRange": 1.5,
+      "maxRange": 5.0,
+      "active": true
+    },
+    {
+      "name": "Liquefaction Time",
+      "shortCode": "SEM-LIQ",
+      "department": "Semen Analysis",
+      "category": "Semen Analysis",
+      "unit": "min",
+      "price": 75,
+      "minRange": 20,
+      "maxRange": 20,
+      "active": true
+    },
+    {
+      "name": "pH",
+      "shortCode": "SEM-PH",
+      "department": "Semen Analysis",
+      "category": "Semen Analysis",
+      "unit": null,
+      "price": 75,
+      "minRange": 7.5,
+      "maxRange": 8.5,
+      "active": true
+    },
+    {
+      "name": "Rapid Progression",
+      "shortCode": "SEM-RAP",
+      "department": "Semen Analysis",
+      "category": "Semen Analysis",
+      "unit": "%",
+      "price": 100,
+      "minRange": null,
+      "maxRange": null,
+      "active": true
+    },
+    {
+      "name": "Slow Progression",
+      "shortCode": "SEM-SLO",
+      "department": "Semen Analysis",
+      "category": "Semen Analysis",
+      "unit": "%",
+      "price": 100,
+      "minRange": null,
+      "maxRange": null,
+      "active": true
+    },
+    {
+      "name": "Immotile",
+      "shortCode": "SEM-IMM",
+      "department": "Semen Analysis",
+      "category": "Semen Analysis",
+      "unit": "%",
+      "price": 100,
+      "minRange": null,
+      "maxRange": null,
+      "active": true
+    },
+    {
+      "name": "Count",
+      "shortCode": "SEM-COUNT",
+      "department": "Semen Analysis",
+      "category": "Semen Analysis",
+      "unit": "Millions/mL",
+      "price": 120,
+      "minRange": 20,
+      "maxRange": 120,
+      "active": true
+    },
+    {
+      "name": "Pus cells",
+      "shortCode": "SEM-PUS",
+      "department": "Semen Analysis",
+      "category": "Semen Analysis",
+      "unit": "/HPF",
+      "price": 120,
+      "minRange": 0,
+      "maxRange": 5,
+      "active": true
     }
   ],
   "panels": [
@@ -1169,9 +1323,77 @@
         "UR-PARA",
         "UR-MUC"
       ]
+    },
+    {
+      "name": "Semen Analysis",
+      "department": "Semen Analysis",
+      "price": 1000,
+      "active": true,
+      "tests": [
+        "SEM-COLL",
+        "SEM-ABS",
+        "SEM-TSP",
+        "SEM-AT",
+        "SEM-COL",
+        "SEM-VOL",
+        "SEM-LIQ",
+        "SEM-PH",
+        "SEM-RAP",
+        "SEM-SLO",
+        "SEM-IMM",
+        "SEM-COUNT",
+        "SEM-PUS"
+      ]
     }
   ],
   "ranges": [
+    {
+      "testShortCode": "SEM-COL",
+      "gender": "Male",
+      "minAge": 18,
+      "maxAge": 120,
+      "referenceText": "Pale white - Creamy white"
+    },
+    {
+      "testShortCode": "SEM-VOL",
+      "gender": "Male",
+      "minAge": 18,
+      "maxAge": 120,
+      "minVal": 1.5,
+      "maxVal": 5.0
+    },
+    {
+      "testShortCode": "SEM-LIQ",
+      "gender": "Male",
+      "minAge": 18,
+      "maxAge": 120,
+      "minVal": 20,
+      "maxVal": 20
+    },
+    {
+      "testShortCode": "SEM-PH",
+      "gender": "Male",
+      "minAge": 18,
+      "maxAge": 120,
+      "minVal": 7.5,
+      "maxVal": 8.5
+    },
+    {
+      "testShortCode": "SEM-COUNT",
+      "gender": "Male",
+      "minAge": 18,
+      "maxAge": 120,
+      "minVal": 20,
+      "maxVal": 120
+    },
+    {
+      "testShortCode": "SEM-PUS",
+      "gender": "Male",
+      "minAge": 18,
+      "maxAge": 120,
+      "minVal": 0,
+      "maxVal": 5
+    },
     {
       "testShortCode": "RBC",
       "gender": "Female",

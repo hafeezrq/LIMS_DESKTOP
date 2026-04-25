@@ -9,7 +9,8 @@ INSERT INTO department (name, code, active) VALUES
   ('Serology', 'SER', TRUE),
   ('Thyroid', 'THY', TRUE),
   ('Urine', 'URI', TRUE),
-  ('Microbiology', 'MIC', TRUE)
+  ('Microbiology', 'MIC', TRUE),
+  ('Semen Analysis', 'SEM', TRUE)
 ON CONFLICT (name) DO UPDATE
 SET code = EXCLUDED.code,
     active = EXCLUDED.active;
@@ -39,7 +40,8 @@ WITH seed_category(name, department_name, description, active) AS (
     ('Chemical', 'Urine', 'Chemical examination', TRUE),
     ('Microscopic', 'Urine', 'Microscopic examination', TRUE),
     ('Pregnancy', 'Urine', 'Pregnancy testing', TRUE),
-    ('Culture & Sensitivity', 'Microbiology', 'Cultures', TRUE)
+    ('Culture & Sensitivity', 'Microbiology', 'Cultures', TRUE),
+    ('Semen Analysis', 'Semen Analysis', 'Routine semen analysis profile', TRUE)
 )
 INSERT INTO test_categories (name, department_id, description, is_active)
 SELECT sc.name, d.id, sc.description, sc.active
@@ -163,7 +165,20 @@ BEGIN
         ('Mucus threads', 'UR-MUC', 'Urine', 'Microscopic', NULL, 10, NULL, NULL, TRUE),
         ('Urine Culture', 'URINE-CS', 'Urine', 'Urinalysis', NULL, 800, NULL, NULL, TRUE),
         ('Urine Pregnancy (UPT)', 'UPT', 'Urine', 'Pregnancy', NULL, 200, NULL, NULL, TRUE),
-        ('Blood Culture', 'BLD-CS', 'Microbiology', 'Culture & Sensitivity', NULL, 1200, NULL, NULL, TRUE);
+        ('Blood Culture', 'BLD-CS', 'Microbiology', 'Culture & Sensitivity', NULL, 1200, NULL, NULL, TRUE),
+        ('Sample Collection', 'SEM-COLL', 'Semen Analysis', 'Semen Analysis', NULL, 50, NULL, NULL, TRUE),
+        ('Duration of Abstinence', 'SEM-ABS', 'Semen Analysis', 'Semen Analysis', 'days', 50, NULL, NULL, TRUE),
+        ('Time of Sample Production', 'SEM-TSP', 'Semen Analysis', 'Semen Analysis', 'HH:mm', 50, NULL, NULL, TRUE),
+        ('Analysis Time', 'SEM-AT', 'Semen Analysis', 'Semen Analysis', 'HH:mm', 50, NULL, NULL, TRUE),
+        ('Colour', 'SEM-COL', 'Semen Analysis', 'Semen Analysis', NULL, 75, NULL, NULL, TRUE),
+        ('Volume', 'SEM-VOL', 'Semen Analysis', 'Semen Analysis', 'mL', 75, 1.5, 5, TRUE),
+        ('Liquefaction Time', 'SEM-LIQ', 'Semen Analysis', 'Semen Analysis', 'min', 75, 20, 20, TRUE),
+        ('pH', 'SEM-PH', 'Semen Analysis', 'Semen Analysis', NULL, 75, 7.5, 8.5, TRUE),
+        ('Rapid Progression', 'SEM-RAP', 'Semen Analysis', 'Semen Analysis', '%', 100, NULL, NULL, TRUE),
+        ('Slow Progression', 'SEM-SLO', 'Semen Analysis', 'Semen Analysis', '%', 100, NULL, NULL, TRUE),
+        ('Immotile', 'SEM-IMM', 'Semen Analysis', 'Semen Analysis', '%', 100, NULL, NULL, TRUE),
+        ('Count', 'SEM-COUNT', 'Semen Analysis', 'Semen Analysis', 'Millions/mL', 120, 20, 120, TRUE),
+        ('Pus cells', 'SEM-PUS', 'Semen Analysis', 'Semen Analysis', '/HPF', 120, 0, 5, TRUE);
 
     FOR rec IN
         SELECT r.*, d.id AS department_id, c.id AS category_id
@@ -228,7 +243,8 @@ BEGIN
 
     INSERT INTO _seed_panel_rows (panel_name, department_name, price, active) VALUES
         ('CBC / Blood CP', 'Hematology', 650, TRUE),
-        ('Urine Routine', 'Urine', 200, TRUE);
+        ('Urine Routine', 'Urine', 200, TRUE),
+        ('Semen Analysis', 'Semen Analysis', 1000, TRUE);
 
     CREATE TEMP TABLE _seed_panel_test_rows (
         panel_name TEXT,
@@ -277,7 +293,20 @@ BEGIN
         ('Urine Routine', 'Urine', 'UR-BACT'),
         ('Urine Routine', 'Urine', 'UR-YEAST'),
         ('Urine Routine', 'Urine', 'UR-PARA'),
-        ('Urine Routine', 'Urine', 'UR-MUC');
+        ('Urine Routine', 'Urine', 'UR-MUC'),
+        ('Semen Analysis', 'Semen Analysis', 'SEM-COLL'),
+        ('Semen Analysis', 'Semen Analysis', 'SEM-ABS'),
+        ('Semen Analysis', 'Semen Analysis', 'SEM-TSP'),
+        ('Semen Analysis', 'Semen Analysis', 'SEM-AT'),
+        ('Semen Analysis', 'Semen Analysis', 'SEM-COL'),
+        ('Semen Analysis', 'Semen Analysis', 'SEM-VOL'),
+        ('Semen Analysis', 'Semen Analysis', 'SEM-LIQ'),
+        ('Semen Analysis', 'Semen Analysis', 'SEM-PH'),
+        ('Semen Analysis', 'Semen Analysis', 'SEM-RAP'),
+        ('Semen Analysis', 'Semen Analysis', 'SEM-SLO'),
+        ('Semen Analysis', 'Semen Analysis', 'SEM-IMM'),
+        ('Semen Analysis', 'Semen Analysis', 'SEM-COUNT'),
+        ('Semen Analysis', 'Semen Analysis', 'SEM-PUS');
 
     FOR rec IN SELECT * FROM _seed_panel_rows LOOP
         SELECT d.id INTO v_dept_id
@@ -339,95 +368,101 @@ END $$;
 WITH existing_range_tests AS (
     SELECT DISTINCT rr.test_id FROM reference_range rr
 ),
-seed_range(test_short_code, test_name, gender, min_age, max_age, min_val, max_val) AS (
+seed_range(test_short_code, test_name, gender, min_age, max_age, min_val, max_val, reference_text) AS (
     VALUES
-        ('RBC', NULL, 'Female', 18, 120, 4.1, 5.1),
-        ('RBC', NULL, 'Male', 18, 120, 4.5, 5.9),
-        ('HB', NULL, 'Female', 18, 120, 120, 150),
-        ('HB', NULL, 'Male', 18, 120, 130, 170),
-        ('HCT', NULL, 'Female', 18, 120, 0.36, 0.48),
-        ('HCT', NULL, 'Male', 18, 120, 0.4, 0.52),
-        ('MCV', NULL, 'Female', 18, 120, 80, 100),
-        ('MCV', NULL, 'Male', 18, 120, 80, 100),
-        ('MCH', NULL, 'Female', 18, 120, 27, 33),
-        ('MCH', NULL, 'Male', 18, 120, 27, 33),
-        ('MCHC', NULL, 'Female', 18, 120, 320, 360),
-        ('MCHC', NULL, 'Male', 18, 120, 320, 360),
-        ('RDW', NULL, 'Female', 18, 120, 11.5, 14.5),
-        ('RDW', NULL, 'Male', 18, 120, 11.5, 14.5),
-        ('RDW', NULL, 'Both', 1, 12, 11.5, 15),
-        ('WBC', NULL, 'Female', 18, 120, 4, 11),
-        ('WBC', NULL, 'Male', 18, 120, 4, 11),
-        ('NEUT', NULL, 'Both', 18, 120, 1.81, 7.59),
-        ('LYMPH', NULL, 'Both', 18, 120, 1.1, 4.75),
-        ('MONO', NULL, 'Both', 18, 120, 0.2, 1),
-        ('EOS', NULL, 'Both', 18, 120, 0.02, 0.6),
-        ('BASO', NULL, 'Both', 18, 120, 0.01, 0.09),
-        ('NEUTP', NULL, 'Both', 18, 120, 40, 70),
-        ('NEUTP', NULL, 'Both', 1, 12, 30, 60),
-        ('LYMPHP', NULL, 'Both', 18, 120, 20, 40),
-        ('LYMPHP', NULL, 'Both', 1, 12, 30, 60),
-        ('MONOP', NULL, 'Both', 18, 120, 2, 8),
-        ('MONOP', NULL, 'Both', 1, 12, 2, 8),
-        ('EOSP', NULL, 'Both', 18, 120, 1, 6),
-        ('EOSP', NULL, 'Both', 1, 12, 1, 6),
-        ('BASOP', NULL, 'Both', 18, 120, 0, 1),
-        ('BASOP', NULL, 'Both', 1, 12, 0, 1),
-        ('PLT', NULL, 'Both', 18, 120, 150, 450),
-        ('MPV', NULL, 'Both', 1, 120, 7.5, 11.5),
-        ('PDW', NULL, 'Both', 1, 120, 9, 17),
-        ('PCT', NULL, 'Both', 1, 120, 0.2, 0.4),
-        ('ESR', NULL, 'Both', 18, 120, 2, 15),
-        ('WBC', NULL, 'Both', 1, 1, 5, 14),
-        ('RBC', NULL, 'Both', 1, 1, 4, 5.2),
-        ('HB', NULL, 'Both', 1, 1, 110, 140),
-        ('HCT', NULL, 'Both', 1, 1, 0.33, 0.43),
-        ('MCV', NULL, 'Both', 1, 1, 77, 95),
-        ('MCH', NULL, 'Both', 1, 1, 25, 31),
-        ('MCHC', NULL, 'Both', 1, 1, 320, 360),
-        ('PLT', NULL, 'Both', 1, 1, 150, 450),
-        ('NEUT', NULL, 'Both', 1, 1, 1, 7),
-        ('LYMPH', NULL, 'Both', 1, 1, 3.5, 11),
-        ('MONO', NULL, 'Both', 1, 1, 0.2, 1),
-        ('EOS', NULL, 'Both', 1, 1, 0.1, 1),
-        ('WBC', NULL, 'Both', 2, 6, 5, 14),
-        ('RBC', NULL, 'Both', 2, 6, 4, 5.2),
-        ('HB', NULL, 'Both', 2, 6, 110, 140),
-        ('HCT', NULL, 'Both', 2, 6, 0.33, 0.43),
-        ('MCV', NULL, 'Both', 2, 6, 77, 95),
-        ('MCH', NULL, 'Both', 2, 6, 25, 31),
-        ('MCHC', NULL, 'Both', 2, 6, 320, 360),
-        ('PLT', NULL, 'Both', 2, 6, 150, 450),
-        ('NEUT', NULL, 'Both', 2, 6, 1.5, 8),
-        ('LYMPH', NULL, 'Both', 2, 6, 6, 9),
-        ('MONO', NULL, 'Both', 2, 6, 0.2, 1),
-        ('EOS', NULL, 'Both', 2, 6, 0.1, 1),
-        ('WBC', NULL, 'Both', 7, 12, 5, 14),
-        ('RBC', NULL, 'Both', 7, 12, 4, 5.2),
-        ('HB', NULL, 'Both', 7, 12, 110, 140),
-        ('HCT', NULL, 'Both', 7, 12, 0.33, 0.43),
-        ('MCV', NULL, 'Both', 7, 12, 77, 95),
-        ('MCH', NULL, 'Both', 7, 12, 25, 31),
-        ('MCHC', NULL, 'Both', 7, 12, 320, 360),
-        ('PLT', NULL, 'Both', 7, 12, 150, 450),
-        ('NEUT', NULL, 'Both', 7, 12, 2, 8),
-        ('LYMPH', NULL, 'Both', 7, 12, 1, 5),
-        ('MONO', NULL, 'Both', 7, 12, 0.2, 1),
-        ('EOS', NULL, 'Both', 7, 12, 0.1, 1),
-        ('GLU-F', NULL, 'Male', 18, 120, 3.1, 6.4),
-        ('GLU-F', NULL, 'Female', 18, 120, 3.3, 6.4),
-        ('UREA', NULL, 'Male', 18, 120, 2, 9.2),
-        ('UREA', NULL, 'Female', 18, 120, 2.2, 7.2),
-        ('CREAT', NULL, 'Male', 18, 120, 35, 133),
-        ('CREAT', NULL, 'Female', 18, 120, 27, 115),
-        ('URIC', NULL, 'Male', 18, 120, 178, 506),
-        ('URIC', NULL, 'Female', 18, 120, 119, 434),
-        ('CHOL', NULL, 'Both', 18, 120, 3.2, 6.6),
-        ('TRIG', NULL, 'Both', 18, 120, 0.6, 2.3),
-        ('TBIL', NULL, 'Both', 18, 120, 5, 18),
-        ('TP', NULL, 'Both', 18, 120, 57, 83),
-        ('ALT', NULL, 'Both', 18, 120, 15, 45),
-        ('ALP', NULL, 'Both', 18, 120, 185, 620)
+        ('RBC', NULL, 'Female', 18, 120, 4.1, 5.1, NULL),
+        ('RBC', NULL, 'Male', 18, 120, 4.5, 5.9, NULL),
+        ('HB', NULL, 'Female', 18, 120, 120, 150, NULL),
+        ('HB', NULL, 'Male', 18, 120, 130, 170, NULL),
+        ('HCT', NULL, 'Female', 18, 120, 0.36, 0.48, NULL),
+        ('HCT', NULL, 'Male', 18, 120, 0.4, 0.52, NULL),
+        ('MCV', NULL, 'Female', 18, 120, 80, 100, NULL),
+        ('MCV', NULL, 'Male', 18, 120, 80, 100, NULL),
+        ('MCH', NULL, 'Female', 18, 120, 27, 33, NULL),
+        ('MCH', NULL, 'Male', 18, 120, 27, 33, NULL),
+        ('MCHC', NULL, 'Female', 18, 120, 320, 360, NULL),
+        ('MCHC', NULL, 'Male', 18, 120, 320, 360, NULL),
+        ('RDW', NULL, 'Female', 18, 120, 11.5, 14.5, NULL),
+        ('RDW', NULL, 'Male', 18, 120, 11.5, 14.5, NULL),
+        ('RDW', NULL, 'Both', 1, 12, 11.5, 15, NULL),
+        ('WBC', NULL, 'Female', 18, 120, 4, 11, NULL),
+        ('WBC', NULL, 'Male', 18, 120, 4, 11, NULL),
+        ('NEUT', NULL, 'Both', 18, 120, 1.81, 7.59, NULL),
+        ('LYMPH', NULL, 'Both', 18, 120, 1.1, 4.75, NULL),
+        ('MONO', NULL, 'Both', 18, 120, 0.2, 1, NULL),
+        ('EOS', NULL, 'Both', 18, 120, 0.02, 0.6, NULL),
+        ('BASO', NULL, 'Both', 18, 120, 0.01, 0.09, NULL),
+        ('NEUTP', NULL, 'Both', 18, 120, 40, 70, NULL),
+        ('NEUTP', NULL, 'Both', 1, 12, 30, 60, NULL),
+        ('LYMPHP', NULL, 'Both', 18, 120, 20, 40, NULL),
+        ('LYMPHP', NULL, 'Both', 1, 12, 30, 60, NULL),
+        ('MONOP', NULL, 'Both', 18, 120, 2, 8, NULL),
+        ('MONOP', NULL, 'Both', 1, 12, 2, 8, NULL),
+        ('EOSP', NULL, 'Both', 18, 120, 1, 6, NULL),
+        ('EOSP', NULL, 'Both', 1, 12, 1, 6, NULL),
+        ('BASOP', NULL, 'Both', 18, 120, 0, 1, NULL),
+        ('BASOP', NULL, 'Both', 1, 12, 0, 1, NULL),
+        ('PLT', NULL, 'Both', 18, 120, 150, 450, NULL),
+        ('MPV', NULL, 'Both', 1, 120, 7.5, 11.5, NULL),
+        ('PDW', NULL, 'Both', 1, 120, 9, 17, NULL),
+        ('PCT', NULL, 'Both', 1, 120, 0.2, 0.4, NULL),
+        ('ESR', NULL, 'Both', 18, 120, 2, 15, NULL),
+        ('WBC', NULL, 'Both', 1, 1, 5, 14, NULL),
+        ('RBC', NULL, 'Both', 1, 1, 4, 5.2, NULL),
+        ('HB', NULL, 'Both', 1, 1, 110, 140, NULL),
+        ('HCT', NULL, 'Both', 1, 1, 0.33, 0.43, NULL),
+        ('MCV', NULL, 'Both', 1, 1, 77, 95, NULL),
+        ('MCH', NULL, 'Both', 1, 1, 25, 31, NULL),
+        ('MCHC', NULL, 'Both', 1, 1, 320, 360, NULL),
+        ('PLT', NULL, 'Both', 1, 1, 150, 450, NULL),
+        ('NEUT', NULL, 'Both', 1, 1, 1, 7, NULL),
+        ('LYMPH', NULL, 'Both', 1, 1, 3.5, 11, NULL),
+        ('MONO', NULL, 'Both', 1, 1, 0.2, 1, NULL),
+        ('EOS', NULL, 'Both', 1, 1, 0.1, 1, NULL),
+        ('WBC', NULL, 'Both', 2, 6, 5, 14, NULL),
+        ('RBC', NULL, 'Both', 2, 6, 4, 5.2, NULL),
+        ('HB', NULL, 'Both', 2, 6, 110, 140, NULL),
+        ('HCT', NULL, 'Both', 2, 6, 0.33, 0.43, NULL),
+        ('MCV', NULL, 'Both', 2, 6, 77, 95, NULL),
+        ('MCH', NULL, 'Both', 2, 6, 25, 31, NULL),
+        ('MCHC', NULL, 'Both', 2, 6, 320, 360, NULL),
+        ('PLT', NULL, 'Both', 2, 6, 150, 450, NULL),
+        ('NEUT', NULL, 'Both', 2, 6, 1.5, 8, NULL),
+        ('LYMPH', NULL, 'Both', 2, 6, 6, 9, NULL),
+        ('MONO', NULL, 'Both', 2, 6, 0.2, 1, NULL),
+        ('EOS', NULL, 'Both', 2, 6, 0.1, 1, NULL),
+        ('WBC', NULL, 'Both', 7, 12, 5, 14, NULL),
+        ('RBC', NULL, 'Both', 7, 12, 4, 5.2, NULL),
+        ('HB', NULL, 'Both', 7, 12, 110, 140, NULL),
+        ('HCT', NULL, 'Both', 7, 12, 0.33, 0.43, NULL),
+        ('MCV', NULL, 'Both', 7, 12, 77, 95, NULL),
+        ('MCH', NULL, 'Both', 7, 12, 25, 31, NULL),
+        ('MCHC', NULL, 'Both', 7, 12, 320, 360, NULL),
+        ('PLT', NULL, 'Both', 7, 12, 150, 450, NULL),
+        ('NEUT', NULL, 'Both', 7, 12, 2, 8, NULL),
+        ('LYMPH', NULL, 'Both', 7, 12, 1, 5, NULL),
+        ('MONO', NULL, 'Both', 7, 12, 0.2, 1, NULL),
+        ('EOS', NULL, 'Both', 7, 12, 0.1, 1, NULL),
+        ('GLU-F', NULL, 'Male', 18, 120, 3.1, 6.4, NULL),
+        ('GLU-F', NULL, 'Female', 18, 120, 3.3, 6.4, NULL),
+        ('UREA', NULL, 'Male', 18, 120, 2, 9.2, NULL),
+        ('UREA', NULL, 'Female', 18, 120, 2.2, 7.2, NULL),
+        ('CREAT', NULL, 'Male', 18, 120, 35, 133, NULL),
+        ('CREAT', NULL, 'Female', 18, 120, 27, 115, NULL),
+        ('URIC', NULL, 'Male', 18, 120, 178, 506, NULL),
+        ('URIC', NULL, 'Female', 18, 120, 119, 434, NULL),
+        ('CHOL', NULL, 'Both', 18, 120, 3.2, 6.6, NULL),
+        ('TRIG', NULL, 'Both', 18, 120, 0.6, 2.3, NULL),
+        ('TBIL', NULL, 'Both', 18, 120, 5, 18, NULL),
+        ('TP', NULL, 'Both', 18, 120, 57, 83, NULL),
+        ('ALT', NULL, 'Both', 18, 120, 15, 45, NULL),
+        ('ALP', NULL, 'Both', 18, 120, 185, 620, NULL),
+        ('SEM-COL', NULL, 'Male', 18, 120, NULL, NULL, 'Pale white - Creamy white'),
+        ('SEM-VOL', NULL, 'Male', 18, 120, 1.5, 5, NULL),
+        ('SEM-LIQ', NULL, 'Male', 18, 120, 20, 20, NULL),
+        ('SEM-PH', NULL, 'Male', 18, 120, 7.5, 8.5, NULL),
+        ('SEM-COUNT', NULL, 'Male', 18, 120, 20, 120, NULL),
+        ('SEM-PUS', NULL, 'Male', 18, 120, 0, 5, NULL)
 ),
 resolved AS (
     SELECT sr.*, t.id AS test_id
@@ -440,10 +475,11 @@ resolved AS (
         ORDER BY CASE WHEN sr.test_short_code IS NOT NULL AND lower(td.short_code) = lower(sr.test_short_code) THEN 0 ELSE 1 END, td.id
         LIMIT 1
     ) t ON TRUE
-    WHERE sr.min_val IS NOT NULL AND sr.max_val IS NOT NULL
+    WHERE (sr.min_val IS NOT NULL AND sr.max_val IS NOT NULL)
+       OR sr.reference_text IS NOT NULL
 )
-INSERT INTO reference_range (test_id, gender, min_age, max_age, min_val, max_val)
-SELECT r.test_id, COALESCE(r.gender, 'Both'), r.min_age, r.max_age, r.min_val, r.max_val
+INSERT INTO reference_range (test_id, gender, min_age, max_age, min_val, max_val, reference_text)
+SELECT r.test_id, COALESCE(r.gender, 'Both'), r.min_age, r.max_age, r.min_val, r.max_val, r.reference_text
 FROM resolved r
 LEFT JOIN existing_range_tests e ON e.test_id = r.test_id
 WHERE r.test_id IS NOT NULL

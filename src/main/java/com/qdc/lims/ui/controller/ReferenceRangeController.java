@@ -64,6 +64,9 @@ public class ReferenceRangeController {
     private TextField maxValField;
 
     @FXML
+    private TextField referenceTextField;
+
+    @FXML
     private Button addButton;
 
     @FXML
@@ -108,8 +111,23 @@ public class ReferenceRangeController {
 
         normalRangeColumn.setCellValueFactory(cellData -> {
             ReferenceRange r = cellData.getValue();
+            if (r.getReferenceText() != null && !r.getReferenceText().trim().isEmpty()) {
+                return new SimpleStringProperty(r.getReferenceText().trim());
+            }
+            if (r.getMinVal() == null && r.getMaxVal() == null) {
+                return new SimpleStringProperty("-");
+            }
             String unit = currentTest != null && currentTest.getUnit() != null ? currentTest.getUnit() : "";
-            return new SimpleStringProperty(r.getMinVal() + " - " + r.getMaxVal() + " " + unit);
+            String min = r.getMinVal() != null ? r.getMinVal().toPlainString() : "";
+            String max = r.getMaxVal() != null ? r.getMaxVal().toPlainString() : "";
+            String suffix = unit.isBlank() ? "" : " " + unit;
+            if (!min.isEmpty() && !max.isEmpty()) {
+                return new SimpleStringProperty(min + " - " + max + suffix);
+            }
+            if (!min.isEmpty()) {
+                return new SimpleStringProperty(">= " + min + suffix);
+            }
+            return new SimpleStringProperty("<= " + max + suffix);
         });
 
         rangesTable.setItems(rangesList);
@@ -192,22 +210,34 @@ public class ReferenceRangeController {
         }
 
         if (minAgeField.getText().isEmpty() || maxAgeField.getText().isEmpty() ||
-                minValField.getText().isEmpty() || maxValField.getText().isEmpty()) {
-            showAlert("Validation Error", "All fields are required.");
+                (minValField.getText().isEmpty() || maxValField.getText().isEmpty()) &&
+                        (referenceTextField.getText() == null || referenceTextField.getText().trim().isEmpty())) {
+            showAlert("Validation Error", "Enter age and either numeric values or a text reference.");
             return;
         }
 
         try {
             int minAge = Integer.parseInt(minAgeField.getText());
             int maxAge = Integer.parseInt(maxAgeField.getText());
-            java.math.BigDecimal minVal = new java.math.BigDecimal(minValField.getText());
-            java.math.BigDecimal maxVal = new java.math.BigDecimal(maxValField.getText());
+            String referenceText = referenceTextField.getText() != null ? referenceTextField.getText().trim() : "";
+            boolean hasTextReference = !referenceText.isEmpty();
+
+            java.math.BigDecimal minVal = null;
+            java.math.BigDecimal maxVal = null;
+            if (!hasTextReference) {
+                if (minValField.getText().isEmpty() || maxValField.getText().isEmpty()) {
+                    showAlert("Validation Error", "Both Min and Max values are required for numeric ranges.");
+                    return;
+                }
+                minVal = new java.math.BigDecimal(minValField.getText());
+                maxVal = new java.math.BigDecimal(maxValField.getText());
+            }
 
             if (minAge > maxAge) {
                 showAlert("Validation Error", "Min Age cannot be greater than Max Age.");
                 return;
             }
-            if (minVal.compareTo(maxVal) > 0) {
+            if (minVal != null && maxVal != null && minVal.compareTo(maxVal) > 0) {
                 showAlert("Validation Error", "Min Value cannot be greater than Max Value.");
                 return;
             }
@@ -219,6 +249,7 @@ public class ReferenceRangeController {
             range.setMaxAge(maxAge);
             range.setMinVal(minVal);
             range.setMaxVal(maxVal);
+            range.setReferenceText(hasTextReference ? referenceText : null);
 
             referenceRangeRepository.save(range);
             refreshData();
@@ -264,6 +295,7 @@ public class ReferenceRangeController {
         maxAgeField.clear();
         minValField.clear();
         maxValField.clear();
+        referenceTextField.clear();
         genderCombo.setValue("Both");
     }
 

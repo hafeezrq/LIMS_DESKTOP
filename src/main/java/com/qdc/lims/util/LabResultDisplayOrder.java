@@ -81,7 +81,21 @@ public final class LabResultDisplayOrder {
             Map.entry("UR-RBC", 115),
             Map.entry("RBCS", 115),
             Map.entry("UR-EP", 116),
-            Map.entry("EPITHELIAL", 116));
+            Map.entry("EPITHELIAL", 116),
+
+            Map.entry("SEM-COLL", 201),
+            Map.entry("SEM-ABS", 202),
+            Map.entry("SEM-TSP", 203),
+            Map.entry("SEM-AT", 204),
+            Map.entry("SEM-COL", 205),
+            Map.entry("SEM-VOL", 206),
+            Map.entry("SEM-LIQ", 207),
+            Map.entry("SEM-PH", 208),
+            Map.entry("SEM-RAP", 209),
+            Map.entry("SEM-SLO", 210),
+            Map.entry("SEM-IMM", 211),
+            Map.entry("SEM-COUNT", 212),
+            Map.entry("SEM-PUS", 213));
 
     private LabResultDisplayOrder() {
     }
