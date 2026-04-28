@@ -27,7 +27,8 @@ import java.util.Properties;
 @Service
 public class UpdateService {
 
-    private static final String RELEASES_URL = "https://api.github.com/repos/hafeezrq/LIMS_DESKTOP/releases/latest";
+    private static final String REPO_SLUG = System.getProperty("lims.update.repo", "hafeezrq/LIMS_DESKTOP");
+    private static final String RELEASES_URL = "https://api.github.com/repos/" + REPO_SLUG + "/releases/latest";
     private static final String USER_AGENT = "LIMS-Desktop-Update-Checker";
     private static final Duration TIMEOUT = Duration.ofSeconds(20);
 
@@ -102,7 +103,12 @@ public class UpdateService {
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() != 200) {
-            throw new IOException("GitHub API returned " + response.statusCode());
+            String details = response.body();
+            if (details != null && !details.isBlank()) {
+                details = details.replaceAll("\\s+", " ").trim();
+            }
+            throw new IOException("GitHub API returned " + response.statusCode()
+                    + (details == null || details.isBlank() ? "" : (": " + details)));
         }
         return mapper.readValue(response.body(), GitHubRelease.class);
     }
@@ -122,7 +128,14 @@ public class UpdateService {
     private String getCurrentVersion() {
         Optional<String> fromBuildInfo = readBuildInfoVersion();
         if (fromBuildInfo.isPresent()) {
-            return normalizeVersion(fromBuildInfo.get());
+            String normalized = normalizeVersion(fromBuildInfo.get());
+            if (!normalized.isBlank() && !normalized.contains("@")) {
+                return normalized;
+            }
+        }
+        Optional<String> fromPomProps = readPomPropertiesVersion();
+        if (fromPomProps.isPresent()) {
+            return normalizeVersion(fromPomProps.get());
         }
         String fromPackage = UpdateService.class.getPackage().getImplementationVersion();
         if (fromPackage != null && !fromPackage.isBlank()) {
@@ -139,6 +152,24 @@ public class UpdateService {
             Properties props = new Properties();
             props.load(stream);
             String version = props.getProperty("app.version", "").trim();
+            if (version.isBlank()) {
+                return Optional.empty();
+            }
+            return Optional.of(version);
+        } catch (Exception e) {
+            return Optional.empty();
+        }
+    }
+
+    private Optional<String> readPomPropertiesVersion() {
+        try (InputStream stream = UpdateService.class
+                .getResourceAsStream("/META-INF/maven/com.qdc/lims/pom.properties")) {
+            if (stream == null) {
+                return Optional.empty();
+            }
+            Properties props = new Properties();
+            props.load(stream);
+            String version = props.getProperty("version", "").trim();
             if (version.isBlank()) {
                 return Optional.empty();
             }
