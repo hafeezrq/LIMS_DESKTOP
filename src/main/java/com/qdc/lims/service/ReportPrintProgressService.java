@@ -215,6 +215,12 @@ public class ReportPrintProgressService {
     }
 
     private String resolveDepartmentName(LabResult result) {
+        if (result != null && result.getTestDefinition() != null) {
+            String shortCode = result.getTestDefinition().getShortCode();
+            if (shortCode != null && shortCode.trim().toUpperCase(java.util.Locale.ROOT).startsWith("SEM-")) {
+                return "Semen Analysis";
+            }
+        }
         if (result != null
                 && result.getTestDefinition() != null
                 && result.getTestDefinition().getDepartment() != null
