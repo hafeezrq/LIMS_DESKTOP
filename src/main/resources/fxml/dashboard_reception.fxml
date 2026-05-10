@@ -62,11 +62,11 @@
                 <Label text="Quick Actions" style="-fx-font-size: 14; -fx-font-weight: bold; -fx-text-fill: #2c3e50;"/>
                 
                 <!-- Primary Actions -->
-                <Button text="Register New Patient" onAction="#handleRegisterPatient" 
+                <Button fx:id="registerPatientButton" text="Register New Patient" onAction="#handleRegisterPatient" 
                         style="-fx-background-color: #3498db; -fx-text-fill: white; -fx-font-size: 13; -fx-padding: 12; -fx-background-radius: 5; -fx-cursor: hand;"
                         maxWidth="Infinity"/>
                 
-                <Button text="Create Lab Order" onAction="#handleCreateOrder" 
+                <Button fx:id="createOrderButton" text="Create Lab Order" onAction="#handleCreateOrder" 
                         style="-fx-background-color: #27ae60; -fx-text-fill: white; -fx-font-size: 13; -fx-padding: 12; -fx-background-radius: 5; -fx-cursor: hand;"
                         maxWidth="Infinity"/>
                 
@@ -75,14 +75,14 @@
                 <Label text="Order Status" style="-fx-font-size: 14; -fx-font-weight: bold; -fx-text-fill: #2c3e50;"/>
                 
                 <!-- Status Counters -->
-                <VBox fx:id="readyPanel" spacing="5" alignment="CENTER" 
+                <VBox fx:id="readyPanel" spacing="5" alignment="CENTER" focusTraversable="true"
                       style="-fx-background-color: #27ae60; -fx-padding: 12; -fx-background-radius: 5; -fx-cursor: hand;"
                       onMouseClicked="#handleShowReadyOrders">
                     <Label text="Ready for Pickup" style="-fx-font-size: 12; -fx-text-fill: white;"/>
                     <Label fx:id="readyCountLabel" text="0" style="-fx-font-size: 24; -fx-font-weight: bold; -fx-text-fill: white;"/>
                 </VBox>
                 
-                <VBox fx:id="pendingPanel" spacing="5" alignment="CENTER" 
+                <VBox fx:id="pendingPanel" spacing="5" alignment="CENTER" focusTraversable="true"
                       style="-fx-background-color: #e67e22; -fx-padding: 12; -fx-background-radius: 5; -fx-cursor: hand;"
                       onMouseClicked="#handleShowPendingOrders">
                     <Label text="Pending in Lab" style="-fx-font-size: 12; -fx-text-fill: white;"/>
@@ -91,11 +91,11 @@
                 
                 <Region VBox.vgrow="ALWAYS"/>
                 
-                <Button text="Reprint Receipt" onAction="#handleReprintReceipt"
+                <Button fx:id="reprintReceiptButton" text="Reprint Receipt" onAction="#handleReprintReceipt"
                         style="-fx-background-color: #95a5a6; -fx-text-fill: white; -fx-font-size: 12; -fx-padding: 10; -fx-background-radius: 5; -fx-cursor: hand;"
                         maxWidth="Infinity"/>
                 
-                <Button text="Refresh" onAction="#handleRefresh"
+                <Button fx:id="refreshButton" text="Refresh" onAction="#handleRefresh"
                         style="-fx-background-color: #ecf0f1; -fx-text-fill: #2c3e50; -fx-font-size: 11; -fx-padding: 8; -fx-background-radius: 5; -fx-cursor: hand;"
                         maxWidth="Infinity"/>
             </VBox>
@@ -107,9 +107,9 @@
                     <Label text="Orders" style="-fx-font-size: 16; -fx-font-weight: bold; -fx-text-fill: #2c3e50;"/>
                     <Region HBox.hgrow="ALWAYS"/>
                     <TextField fx:id="searchField" promptText="Search by MRN or Patient Name..." prefWidth="250"/>
-                    <Button text="Search" onAction="#handleSearchInTable"
+                    <Button fx:id="ordersSearchButton" text="Search" onAction="#handleSearchInTable"
                             style="-fx-background-color: #3498db; -fx-text-fill: white; -fx-padding: 5 15;"/>
-                    <Button text="Clear" onAction="#handleRefresh"
+                    <Button fx:id="ordersClearButton" text="Clear" onAction="#handleRefresh"
                             style="-fx-background-color: #95a5a6; -fx-text-fill: white; -fx-padding: 5 15;"/>
                 </HBox>
                 
@@ -130,7 +130,7 @@
                                 </placeholder>
                             </TableView>
                             <HBox spacing="10" alignment="CENTER_RIGHT">
-                                <Button text="Deliver Report" onAction="#handleDeliverReport"
+                                <Button fx:id="deliverReportButton" text="Deliver Report" onAction="#handleDeliverReport"
                                         style="-fx-background-color: #27ae60; -fx-text-fill: white; -fx-padding: 8 20; -fx-background-radius: 4;"/>
                             </HBox>
                         </VBox>

@@ -48,6 +48,8 @@ import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextFlow;
 import javafx.stage.Modality;
@@ -144,6 +146,20 @@ public class ReceptionDashboardController {
     private TabPane ordersTabPane;
     @FXML
     private TextField searchField;
+    @FXML
+    private Button registerPatientButton;
+    @FXML
+    private Button createOrderButton;
+    @FXML
+    private Button reprintReceiptButton;
+    @FXML
+    private Button refreshButton;
+    @FXML
+    private Button ordersSearchButton;
+    @FXML
+    private Button ordersClearButton;
+    @FXML
+    private Button deliverReportButton;
 
     // Ready Orders Table
     @FXML
@@ -229,6 +245,7 @@ public class ReceptionDashboardController {
         ensureOrdersTabsVisible();
         localeFormatService.applyDatePickerLocale(deliveredFromDatePicker, deliveredToDatePicker);
         initializeDeliveredDateRange();
+        setupKeyboardAccessibility();
         loadOrders();
         startAutoRefresh();
 
@@ -249,6 +266,7 @@ public class ReceptionDashboardController {
                                     welcomeLabel.setText("Welcome, " + username);
                             }
                             applyBranding();
+                            focusRegisterNewPatientButton();
                         }
                     });
                 }
@@ -256,6 +274,244 @@ public class ReceptionDashboardController {
         }
 
         applyBranding();
+        focusRegisterNewPatientButton();
+    }
+
+    private void focusRegisterNewPatientButton() {
+        if (registerPatientButton == null) {
+            return;
+        }
+        Platform.runLater(() -> {
+            registerPatientButton.requestFocus();
+            Platform.runLater(registerPatientButton::requestFocus);
+        });
+    }
+
+    private void setupKeyboardAccessibility() {
+        applyFocusRing(registerPatientButton, "#f1c40f");
+        applyFocusRing(createOrderButton, "#1f6feb");
+        applyFocusRing(reprintReceiptButton, "#1f6feb");
+        applyFocusRing(refreshButton, "#1f6feb");
+        applyFocusRing(ordersSearchButton, "#1f6feb");
+        applyFocusRing(ordersClearButton, "#1f6feb");
+        applyFocusRing(deliverReportButton, "#f1c40f");
+        applyFocusRing(readyPanel, "#f1c40f");
+        applyFocusRing(pendingPanel, "#f1c40f");
+
+        setupPanelKeyboardActivation(readyPanel, this::handleShowReadyOrders);
+        setupPanelKeyboardActivation(pendingPanel, this::handleShowPendingOrders);
+        setupLeftPanelTabOrder();
+        setupOrdersTabTraversal();
+    }
+
+    private void applyFocusRing(Node node, String color) {
+        if (node == null) {
+            return;
+        }
+        String baseStyle = node.getStyle() == null ? "" : node.getStyle();
+        node.focusedProperty().addListener((obs, oldFocused, focused) -> {
+            if (focused) {
+                node.setStyle(baseStyle + "; -fx-border-color: " + color
+                        + "; -fx-border-width: 3; -fx-border-radius: 6;");
+            } else {
+                node.setStyle(baseStyle);
+            }
+        });
+    }
+
+    private void setupPanelKeyboardActivation(VBox panel, Runnable action) {
+        if (panel == null || action == null) {
+            return;
+        }
+        panel.setOnKeyPressed(event -> {
+            if (event.getCode() == KeyCode.ENTER || event.getCode() == KeyCode.SPACE) {
+                action.run();
+                event.consume();
+            }
+        });
+    }
+
+    private void setupLeftPanelTabOrder() {
+        if (registerPatientButton != null) {
+            registerPatientButton.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+                if (event.getCode() == KeyCode.TAB && !event.isShiftDown() && ordersTabPane != null) {
+                    ordersTabPane.getSelectionModel().select(0);
+                    ordersTabPane.requestFocus();
+                    if (readyOrdersTable != null) {
+                        Platform.runLater(() -> {
+                            readyOrdersTable.requestFocus();
+                            if (!readyOrdersTable.getItems().isEmpty()) {
+                                readyOrdersTable.getSelectionModel().selectFirst();
+                                readyOrdersTable.scrollTo(0);
+                            }
+                        });
+                    }
+                    event.consume();
+                }
+            });
+        }
+        if (readyPanel != null) {
+            readyPanel.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+                if (event.getCode() == KeyCode.TAB) {
+                    if (event.isShiftDown() && registerPatientButton != null) {
+                        registerPatientButton.requestFocus();
+                    } else if (pendingPanel != null) {
+                        pendingPanel.requestFocus();
+                    }
+                    event.consume();
+                }
+            });
+        }
+        if (pendingPanel != null) {
+            pendingPanel.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+                if (event.getCode() == KeyCode.TAB) {
+                    if (event.isShiftDown() && readyPanel != null) {
+                        readyPanel.requestFocus();
+                    } else if (createOrderButton != null) {
+                        createOrderButton.requestFocus();
+                    }
+                    event.consume();
+                }
+            });
+        }
+        if (createOrderButton != null) {
+            createOrderButton.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+                if (event.getCode() == KeyCode.TAB) {
+                    if (event.isShiftDown() && pendingPanel != null) {
+                        pendingPanel.requestFocus();
+                    } else if (reprintReceiptButton != null) {
+                        reprintReceiptButton.requestFocus();
+                    }
+                    event.consume();
+                }
+            });
+        }
+        if (reprintReceiptButton != null) {
+            reprintReceiptButton.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+                if (event.getCode() == KeyCode.TAB) {
+                    if (event.isShiftDown() && createOrderButton != null) {
+                        createOrderButton.requestFocus();
+                    } else if (refreshButton != null) {
+                        refreshButton.requestFocus();
+                    }
+                    event.consume();
+                }
+            });
+        }
+        if (refreshButton != null) {
+            refreshButton.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+                if (event.getCode() == KeyCode.TAB && event.isShiftDown() && reprintReceiptButton != null) {
+                    reprintReceiptButton.requestFocus();
+                    event.consume();
+                }
+            });
+        }
+    }
+
+    private void setupOrdersTabTraversal() {
+        if (readyOrdersTable != null) {
+            readyOrdersTable.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+                if (event.getCode() == KeyCode.TAB) {
+                    if (!moveTableSelectionByTab(readyOrdersTable, event.isShiftDown())) {
+                        if (event.isShiftDown()) {
+                            if (registerPatientButton != null) {
+                                registerPatientButton.requestFocus();
+                            }
+                        } else {
+                            focusOrdersTabByIndex(1);
+                        }
+                    }
+                    event.consume();
+                }
+            });
+        }
+        if (pendingOrdersTable != null) {
+            pendingOrdersTable.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+                if (event.getCode() == KeyCode.TAB) {
+                    if (!moveTableSelectionByTab(pendingOrdersTable, event.isShiftDown())) {
+                        focusOrdersTabByIndex(event.isShiftDown() ? 0 : 2);
+                    }
+                    event.consume();
+                }
+            });
+        }
+        if (deliveredOrdersTable != null) {
+            deliveredOrdersTable.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+                if (event.getCode() == KeyCode.TAB) {
+                    if (!moveTableSelectionByTab(deliveredOrdersTable, event.isShiftDown())) {
+                        if (event.isShiftDown()) {
+                            focusOrdersTabByIndex(1);
+                        } else if (registerPatientButton != null) {
+                            registerPatientButton.requestFocus();
+                        }
+                    }
+                    event.consume();
+                }
+            });
+        }
+    }
+
+    private boolean moveTableSelectionByTab(TableView<LabOrder> table, boolean reverse) {
+        if (table == null || table.getItems() == null || table.getItems().isEmpty()) {
+            return false;
+        }
+        int current = table.getSelectionModel().getSelectedIndex();
+        if (current < 0) {
+            table.getSelectionModel().selectFirst();
+            table.scrollTo(0);
+            return true;
+        }
+        if (!reverse) {
+            if (current < table.getItems().size() - 1) {
+                int next = current + 1;
+                table.getSelectionModel().clearAndSelect(next);
+                table.getFocusModel().focus(next);
+                table.scrollTo(next);
+                return true;
+            }
+            return false;
+        }
+        if (current > 0) {
+            int prev = current - 1;
+            table.getSelectionModel().clearAndSelect(prev);
+            table.getFocusModel().focus(prev);
+            table.scrollTo(prev);
+            return true;
+        }
+        return false;
+    }
+
+    private void focusOrdersTabByIndex(int index) {
+        if (ordersTabPane == null || index < 0 || index >= ordersTabPane.getTabs().size()) {
+            return;
+        }
+        ordersTabPane.getSelectionModel().select(index);
+        ordersTabPane.requestFocus();
+        Platform.runLater(() -> {
+            if (index == 0 && readyOrdersTable != null) {
+                readyOrdersTable.requestFocus();
+                if (!readyOrdersTable.getItems().isEmpty()) {
+                    readyOrdersTable.getSelectionModel().selectFirst();
+                    readyOrdersTable.scrollTo(0);
+                }
+            } else if (index == 1 && pendingOrdersTable != null) {
+                pendingOrdersTable.requestFocus();
+                if (!pendingOrdersTable.getItems().isEmpty()) {
+                    pendingOrdersTable.getSelectionModel().selectFirst();
+                    pendingOrdersTable.scrollTo(0);
+                }
+            } else if (index == 2) {
+                if (deliveredSearchField != null) {
+                    deliveredSearchField.requestFocus();
+                } else if (deliveredOrdersTable != null) {
+                    deliveredOrdersTable.requestFocus();
+                    if (!deliveredOrdersTable.getItems().isEmpty()) {
+                        deliveredOrdersTable.getSelectionModel().selectFirst();
+                        deliveredOrdersTable.scrollTo(0);
+                    }
+                }
+            }
+        });
     }
 
     /**
@@ -389,6 +645,15 @@ public class ReceptionDashboardController {
         });
 
         readyOrdersTable.setItems(readyOrders);
+        readyOrdersTable.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (event.getCode() == KeyCode.ENTER || event.getCode() == KeyCode.SPACE) {
+                LabOrder selectedOrder = readyOrdersTable.getSelectionModel().getSelectedItem();
+                if (selectedOrder != null) {
+                    handleManageReadyOrder(selectedOrder);
+                    event.consume();
+                }
+            }
+        });
     }
 
     // When user clicks "Open" on a ready order, show a dialog with order details

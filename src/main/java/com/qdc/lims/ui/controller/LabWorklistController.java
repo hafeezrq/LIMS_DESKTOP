@@ -4,6 +4,7 @@ import com.qdc.lims.entity.LabOrder;
 import com.qdc.lims.repository.LabOrderRepository;
 import com.qdc.lims.service.LocaleFormatService;
 import com.qdc.lims.service.OrderCancellationService;
+import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
@@ -147,6 +148,7 @@ public class LabWorklistController {
             applyFilter();
         } else if (pendingRadio != null) {
             pendingRadio.setSelected(true);
+            focusFirstWorklistRow();
         }
     }
 
@@ -398,6 +400,7 @@ public class LabWorklistController {
         } else if (completedRadio.isSelected()) {
             filteredOrders = filteredOrders.stream()
                     .filter(order -> "COMPLETED".equals(order.getStatus()))
+                    .filter(this::isCompletedToday)
                     .collect(Collectors.toList());
         }
 
@@ -411,9 +414,25 @@ public class LabWorklistController {
         ordersTable.setItems(observableOrders);
         if (!observableOrders.isEmpty()) {
             ordersTable.getSelectionModel().selectFirst();
+            focusFirstWorklistRow();
         } else {
             ordersTable.getSelectionModel().clearSelection();
         }
+    }
+
+    private void focusFirstWorklistRow() {
+        if (ordersTable == null || ordersTable.getItems().isEmpty()) {
+            return;
+        }
+        Platform.runLater(() -> {
+            if (ordersTable.getItems().isEmpty()) {
+                return;
+            }
+            ordersTable.requestFocus();
+            ordersTable.getSelectionModel().selectFirst();
+            ordersTable.getFocusModel().focus(0);
+            ordersTable.scrollTo(0);
+        });
     }
 
     /**
@@ -462,10 +481,9 @@ public class LabWorklistController {
                 .count();
 
         // 3. Count Completed Today
-        LocalDate today = LocalDate.now();
         long completedToday = labOnlyOrders.stream()
                 .filter(o -> "COMPLETED".equals(o.getStatus()))
-                .filter(o -> o.getOrderDate() != null && o.getOrderDate().toLocalDate().equals(today))
+                .filter(this::isCompletedToday)
                 .count();
 
         // long total = orderRepository.findAll().stream()
@@ -531,6 +549,13 @@ public class LabWorklistController {
             }
         }
         return String.valueOf(order.getId()).contains(searchTerm);
+    }
+
+    private boolean isCompletedToday(LabOrder order) {
+        if (order == null || order.getOrderDate() == null) {
+            return false;
+        }
+        return order.getOrderDate().toLocalDate().equals(LocalDate.now());
     }
 
     @FXML
