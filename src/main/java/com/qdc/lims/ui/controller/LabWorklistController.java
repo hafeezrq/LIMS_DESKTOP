@@ -13,6 +13,8 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.BorderPane;
 import javafx.stage.Stage;
@@ -28,6 +30,8 @@ import java.util.stream.Collectors;
  */
 @Component("labWorklistController")
 public class LabWorklistController {
+    @FXML
+    private BorderPane mainContainer;
 
     @FXML
     private RadioButton pendingRadio;
@@ -43,6 +47,12 @@ public class LabWorklistController {
 
     @FXML
     private TextField searchField;
+    @FXML
+    private Button searchButton;
+    @FXML
+    private Button refreshButton;
+    @FXML
+    private Button closeButton;
 
     @FXML
     private Label pendingCountLabel;
@@ -78,7 +88,7 @@ public class LabWorklistController {
     private TableColumn<LabOrder, String> statusColumn;
 
     @FXML
-    private TableColumn<LabOrder, Void> actionColumn;
+    private TableColumn<LabOrder, LabOrder> actionColumn;
 
     private final LabOrderRepository orderRepository;
     private final ApplicationContext springContext;
@@ -127,6 +137,7 @@ public class LabWorklistController {
         });
 
         setupTableColumns();
+        setupAccessibilityAndKeyboard();
         loadOrders();
         updateStats();
 
@@ -203,6 +214,7 @@ public class LabWorklistController {
         });
 
         // Action buttons in table
+        actionColumn.setCellValueFactory(cellData -> new javafx.beans.property.ReadOnlyObjectWrapper<>(cellData.getValue()));
         actionColumn.setCellFactory(param -> new TableCell<>() {
             private final Button viewTestsBtn = new Button("Open");
             private final Button editResultsBtn = new Button("Edit Results");
@@ -222,19 +234,143 @@ public class LabWorklistController {
             }
 
             @Override
-            protected void updateItem(Void item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty) {
+            protected void updateItem(LabOrder order, boolean empty) {
+                super.updateItem(order, empty);
+                setText(null);
+                if (empty || order == null) {
                     setGraphic(null);
                 } else {
-                    LabOrder order = getTableView().getItems().get(getIndex());
-                    if (isPendingStatus(order)) {
+                    if (pendingRadio != null && pendingRadio.isSelected()) {
+                        setGraphic(viewTestsBtn);
+                    } else if (isPendingStatus(order)) {
                         setGraphic(viewTestsBtn);
                     } else {
                         // Allow editing completed orders to fix mistakes
                         setGraphic(editResultsBtn);
                     }
                 }
+            }
+        });
+    }
+
+    private void setupAccessibilityAndKeyboard() {
+        pendingRadio.setFocusTraversable(true);
+        completedRadio.setFocusTraversable(true);
+        allRadio.setFocusTraversable(true);
+        applyFocusRing(searchField);
+        applyFocusRing(searchButton);
+        applyFocusRing(refreshButton);
+        applyFocusRing(ordersTable);
+        applyFocusRing(closeButton);
+        applyFocusRing(pendingRadio);
+        applyFocusRing(completedRadio);
+        applyFocusRing(allRadio);
+
+        if (mainContainer != null) {
+            mainContainer.sceneProperty().addListener((obs, oldScene, newScene) -> {
+                if (newScene == null) {
+                    return;
+                }
+                newScene.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+                    if (event.getCode() == KeyCode.ESCAPE && !isResultEntryInProgress()) {
+                        handleClose();
+                        event.consume();
+                    }
+                });
+            });
+        }
+
+        ordersTable.focusedProperty().addListener((obs, oldFocused, focused) -> {
+            if (focused && !ordersTable.getItems().isEmpty() && ordersTable.getSelectionModel().getSelectedIndex() < 0) {
+                ordersTable.getSelectionModel().selectFirst();
+                ordersTable.scrollTo(0);
+            }
+        });
+
+        ordersTable.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (event.getCode() == KeyCode.TAB) {
+                int current = ordersTable.getSelectionModel().getSelectedIndex();
+                if (!event.isShiftDown()) {
+                    if (current < 0 && !ordersTable.getItems().isEmpty()) {
+                        ordersTable.getSelectionModel().selectFirst();
+                        ordersTable.scrollTo(0);
+                    } else if (current < ordersTable.getItems().size() - 1) {
+                        ordersTable.getSelectionModel().select(current + 1);
+                        ordersTable.scrollTo(current + 1);
+                    } else if (closeButton != null) {
+                        closeButton.requestFocus();
+                    }
+                } else {
+                    if (current > 0) {
+                        ordersTable.getSelectionModel().select(current - 1);
+                        ordersTable.scrollTo(current - 1);
+                    } else if (refreshButton != null) {
+                        refreshButton.requestFocus();
+                    }
+                }
+                event.consume();
+            } else if (event.getCode() == KeyCode.ENTER) {
+                LabOrder selectedOrder = ordersTable.getSelectionModel().getSelectedItem();
+                if (selectedOrder != null) {
+                    openResultEntryForm(selectedOrder);
+                    event.consume();
+                }
+            }
+        });
+
+        setupFilterTabTraversal();
+    }
+
+    private void setupFilterTabTraversal() {
+        pendingRadio.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (event.getCode() == KeyCode.TAB && !event.isShiftDown()) {
+                completedRadio.requestFocus();
+                event.consume();
+            }
+        });
+
+        completedRadio.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (event.getCode() == KeyCode.TAB) {
+                if (event.isShiftDown()) {
+                    pendingRadio.requestFocus();
+                } else {
+                    allRadio.requestFocus();
+                }
+                event.consume();
+            }
+        });
+
+        allRadio.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (event.getCode() == KeyCode.TAB) {
+                if (event.isShiftDown()) {
+                    completedRadio.requestFocus();
+                } else if (searchField != null) {
+                    searchField.requestFocus();
+                }
+                event.consume();
+            }
+        });
+    }
+
+    private boolean isResultEntryInProgress() {
+        Tab currentTab = findCurrentSessionTab();
+        if (currentTab == null) {
+            return false;
+        }
+        String title = currentTab.getText();
+        return title != null && title.contains("Order #");
+    }
+
+    private void applyFocusRing(Control control) {
+        if (control == null) {
+            return;
+        }
+        String baseStyle = control.getStyle() == null ? "" : control.getStyle();
+        control.focusedProperty().addListener((obs, oldFocused, focused) -> {
+            if (focused) {
+                control.setStyle(baseStyle + "; -fx-border-color: #1f6feb; -fx-border-width: 2; -fx-border-radius: 6;");
+            } else {
+                control.setStyle(baseStyle);
             }
         });
     }
@@ -273,6 +409,11 @@ public class LabWorklistController {
 
         ObservableList<LabOrder> observableOrders = FXCollections.observableArrayList(filteredOrders);
         ordersTable.setItems(observableOrders);
+        if (!observableOrders.isEmpty()) {
+            ordersTable.getSelectionModel().selectFirst();
+        } else {
+            ordersTable.getSelectionModel().clearSelection();
+        }
     }
 
     /**
@@ -457,12 +598,14 @@ public class LabWorklistController {
                 });
 
                 currentTab.setContent(root);
+                controller.requestInitialResultCellFocus();
                 return;
             }
 
             Stage stage = new Stage();
             stage.setTitle("Enter Results - Order #" + order.getId());
             stage.setScene(new Scene(root));
+            controller.requestInitialResultCellFocus();
             boolean releaseLockOnClose = manageLock && lockAcquired;
             stage.setOnHidden(e -> {
                 if (releaseLockOnClose) {
@@ -504,7 +647,6 @@ public class LabWorklistController {
     private void refreshWorklistData() {
         loadOrders();
         updateStats();
-        applyFilter();
     }
 
     private Tab findCurrentSessionTab() {

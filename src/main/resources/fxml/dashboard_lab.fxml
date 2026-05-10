@@ -16,12 +16,12 @@
             <HBox style="-fx-background-color: #9b59b6; -fx-padding: 8 15;" spacing="10" alignment="CENTER_LEFT">
                 <Label text="Lab Dashboard" style="-fx-font-size: 16; -fx-font-weight: bold; -fx-text-fill: white;"/>
                 <Region HBox.hgrow="ALWAYS"/>
-                <Button text="Logout" onAction="#handleLogout"
+                <Button fx:id="logoutButton" text="Logout" onAction="#handleLogout"
                         style="-fx-background-color: #c0392b; -fx-text-fill: white; -fx-font-size: 11; -fx-padding: 5 12; -fx-background-radius: 4; -fx-cursor: hand;"/>
             </HBox>
             
             <!-- Menu Bar -->
-            <MenuBar>
+            <MenuBar fx:id="dashboardMenuBar" focusTraversable="true">
                 <Menu text="Lab Worklist">
                     <MenuItem text="Pending Tests" onAction="#handleWorklist"/>
                     <MenuItem text="Completed Tests" onAction="#handleCompletedTests"/>
@@ -43,20 +43,22 @@
                 
                 <!-- Primary Lab Actions -->
                 <HBox spacing="25" alignment="CENTER">
-                    <VBox alignment="CENTER" spacing="10" 
+                    <VBox fx:id="pendingTestsCard" alignment="CENTER" spacing="10" focusTraversable="true"
+                          onMouseClicked="#handlePendingCardClick"
                           style="-fx-background-color: #e67e22; -fx-padding: 30; -fx-background-radius: 10; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.2), 10, 0, 0, 2); -fx-cursor: hand;">
                         <Label text="Pending Tests" style="-fx-font-size: 18; -fx-font-weight: bold; -fx-text-fill: white;"/>
                         <Label fx:id="pendingCountLabel" text="0" style="-fx-font-size: 36; -fx-font-weight: bold; -fx-text-fill: white;"/>
-                        <Button text="View Worklist" onAction="#handleWorklist" 
+                        <Button fx:id="viewWorklistButton" text="View Worklist" onAction="#handleWorklist" 
                                 style="-fx-background-color: white; -fx-text-fill: #e67e22; -fx-font-size: 14; -fx-padding: 10 30; -fx-background-radius: 5; -fx-font-weight: bold; -fx-cursor: hand;"
                                 prefWidth="180"/>
                     </VBox>
                     
-                    <VBox alignment="CENTER" spacing="10" 
+                    <VBox fx:id="completedTodayCard" alignment="CENTER" spacing="10" focusTraversable="true"
+                          onMouseClicked="#handleCompletedCardClick"
                           style="-fx-background-color: #27ae60; -fx-padding: 30; -fx-background-radius: 10; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.2), 10, 0, 0, 2); -fx-cursor: hand;">
                         <Label text="Completed Today" style="-fx-font-size: 18; -fx-font-weight: bold; -fx-text-fill: white;"/>
                         <Label fx:id="completedCountLabel" text="0" style="-fx-font-size: 36; -fx-font-weight: bold; -fx-text-fill: white;"/>
-                        <Button text="View Completed" onAction="#handleCompletedTests" 
+                        <Button fx:id="viewCompletedButton" text="View Completed" onAction="#handleCompletedTests" 
                                 style="-fx-background-color: white; -fx-text-fill: #27ae60; -fx-font-size: 14; -fx-padding: 10 30; -fx-background-radius: 5; -fx-font-weight: bold; -fx-cursor: hand;"
                                 prefWidth="180"/>
                     </VBox>

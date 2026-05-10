@@ -66,7 +66,7 @@
             <Button fx:id="saveButton" text="Save Results" onAction="#handleSaveResults" 
                     style="-fx-background-color: #27ae60; -fx-text-fill: white; -fx-font-size: 14; -fx-padding: 12 40; -fx-background-radius: 5; -fx-font-weight: bold;"
                     prefWidth="200"/>
-            <Button text="Close" onAction="#handleClose" 
+            <Button fx:id="closeButton" text="Close" onAction="#handleClose" 
                     style="-fx-background-color: #95a5a6; -fx-text-fill: white; -fx-font-size: 14; -fx-padding: 12 30; -fx-background-radius: 5;"
                     prefWidth="150"/>
         </HBox>

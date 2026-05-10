@@ -6,6 +6,7 @@
 
 <BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" 
             fx:controller="com.qdc.lims.ui.controller.LabWorklistController"
+            fx:id="mainContainer"
             prefWidth="1200" prefHeight="750">
     
     <!-- Header -->
@@ -35,9 +36,9 @@
                 
                 <Label text="Search:"/>
                 <TextField fx:id="searchField" promptText="MRN or Patient Name" prefWidth="200"/>
-                <Button text="Search" onAction="#handleSearch" 
+                <Button fx:id="searchButton" text="Search" onAction="#handleSearch" 
                         style="-fx-background-color: #3498db; -fx-text-fill: white; -fx-padding: 8 20;"/>
-                <Button text="Refresh" onAction="#handleRefresh" 
+                <Button fx:id="refreshButton" text="Refresh" onAction="#handleRefresh" 
                         style="-fx-background-color: #95a5a6; -fx-text-fill: white; -fx-padding: 8 20;"/>
             </HBox>
             
@@ -75,7 +76,7 @@
             
             <!-- Action Buttons -->
             <HBox spacing="15" alignment="CENTER">
-                <Button text="Close" onAction="#handleClose" 
+                <Button fx:id="closeButton" text="Close" onAction="#handleClose" 
                         style="-fx-background-color: #95a5a6; -fx-text-fill: white; -fx-font-size: 14; -fx-padding: 12 30; -fx-background-radius: 5;"
                         prefWidth="120"/>
             </HBox>

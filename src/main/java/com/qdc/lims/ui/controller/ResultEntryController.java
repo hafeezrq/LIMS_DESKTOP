@@ -63,6 +63,8 @@ public class ResultEntryController {
     private Label messageLabel;
     @FXML
     private Button saveButton;
+    @FXML
+    private Button closeButton;
 
     private final LabOrderRepository orderRepository;
     private final ResultService resultService;
@@ -109,7 +111,53 @@ public class ResultEntryController {
         departmentTabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
             refreshActiveTableFromSelection();
         });
+        applyFocusRing(saveButton, "#f1c40f");
+        applyFocusRing(closeButton, "#1f6feb");
+        if (saveButton != null) {
+            saveButton.setOnKeyPressed(event -> {
+                if (event.getCode() == KeyCode.TAB && !event.isShiftDown() && closeButton != null) {
+                    closeButton.requestFocus();
+                    event.consume();
+                }
+            });
+        }
+        if (closeButton != null) {
+            closeButton.setOnKeyPressed(event -> {
+                if (event.getCode() == KeyCode.TAB && event.isShiftDown() && saveButton != null) {
+                    saveButton.requestFocus();
+                    event.consume();
+                }
+            });
+        }
+        if (departmentTabPane != null) {
+            departmentTabPane.sceneProperty().addListener((obs, oldScene, newScene) -> {
+                if (newScene == null) {
+                    return;
+                }
+                newScene.addEventFilter(javafx.scene.input.KeyEvent.KEY_PRESSED, event -> {
+                    if (event.getCode() == KeyCode.ESCAPE && !hasAnyEnteredResults()) {
+                        handleClose();
+                        event.consume();
+                    }
+                });
+            });
+        }
         messageLabel.setText("");
+    }
+
+    private void applyFocusRing(Button button, String color) {
+        if (button == null) {
+            return;
+        }
+        String baseStyle = button.getStyle() == null ? "" : button.getStyle();
+        button.focusedProperty().addListener((obs, oldFocused, focused) -> {
+            if (focused) {
+                button.setStyle(baseStyle + "; -fx-border-color: " + color
+                        + "; -fx-border-width: 3; -fx-border-radius: 6;");
+            } else {
+                button.setStyle(baseStyle);
+            }
+        });
     }
 
     private TableView<LabResult> createResultsTable() {
@@ -290,7 +338,11 @@ public class ResultEntryController {
                         navigateToRow(delta);
                         event.consume();
                     } else if (event.getCode() == KeyCode.ESCAPE) {
-                        cancelEdit();
+                        if (!hasAnyEnteredResults()) {
+                            handleClose();
+                        } else {
+                            cancelEdit();
+                        }
                         event.consume();
                     }
                 });
@@ -320,6 +372,7 @@ public class ResultEntryController {
                     String selected = comboBox.getValue();
                     if (selected != null) {
                         commitEdit(selected);
+                        navigateToRow(1);
                     }
                 });
 
@@ -340,7 +393,11 @@ public class ResultEntryController {
                         navigateToRow(delta);
                         event.consume();
                     } else if (event.getCode() == KeyCode.ESCAPE) {
-                        cancelEdit();
+                        if (!hasAnyEnteredResults()) {
+                            handleClose();
+                        } else {
+                            cancelEdit();
+                        }
                         event.consume();
                     }
                 });
@@ -367,6 +424,9 @@ public class ResultEntryController {
                 TableView<LabResult> currentTable = getTableView();
 
                 if (targetRow < 0 || targetRow >= currentTable.getItems().size()) {
+                    if (delta > 0) {
+                        moveToNextTabAndFocusFirstResult(currentTable);
+                    }
                     return;
                 }
 
@@ -459,7 +519,17 @@ public class ResultEntryController {
 
         loadResultOptions(sortedResults);
         buildDepartmentTabs(sortedResults);
+        forceInitialResultCellFocus();
+    }
+
+    public void requestInitialResultCellFocus() {
+        forceInitialResultCellFocus();
+    }
+
+    private void forceInitialResultCellFocus() {
         Platform.runLater(this::focusFirstResultCell);
+        Platform.runLater(() -> Platform.runLater(this::focusFirstResultCell));
+        Platform.runLater(() -> Platform.runLater(() -> Platform.runLater(this::focusFirstResultCell)));
     }
 
     private void loadResultOptions(List<LabResult> results) {
@@ -553,14 +623,132 @@ public class ResultEntryController {
         TableView<LabResult> firstTable = resultTables.get(0);
         activeResultsTable = firstTable;
         if (!firstTable.getItems().isEmpty()) {
-            firstTable.requestFocus();
             TableColumn<LabResult, ?> valueColumn = firstTable.getColumns().size() > 1 ? firstTable.getColumns().get(1)
                     : null;
             if (valueColumn != null) {
-                firstTable.getSelectionModel().select(0, valueColumn);
-                firstTable.edit(0, valueColumn);
+                firstTable.requestFocus();
+                firstTable.scrollTo(0);
+                firstTable.getSelectionModel().clearAndSelect(0, valueColumn);
+                firstTable.getFocusModel().focus(0, valueColumn);
+                firstTable.edit(-1, null);
+                Platform.runLater(() -> {
+                    firstTable.requestFocus();
+                    firstTable.getSelectionModel().clearAndSelect(0, valueColumn);
+                    firstTable.getFocusModel().focus(0, valueColumn);
+                    firstTable.edit(0, valueColumn);
+                });
             }
         }
+    }
+
+    private void moveToNextTabAndFocusFirstResult(TableView<LabResult> currentTable) {
+        if (currentTable == null || departmentTabPane == null || departmentTabPane.getTabs().isEmpty()) {
+            return;
+        }
+
+        TabLocation currentLocation = findTabLocationForTable(currentTable);
+        if (currentLocation == null) {
+            return;
+        }
+
+        TabLocation nextLocation = findNextTabLocation(currentLocation);
+        if (nextLocation == null) {
+            focusSaveButton();
+            return;
+        }
+
+        selectTabAndEditFirstRow(nextLocation);
+    }
+
+    private TabLocation findTabLocationForTable(TableView<LabResult> table) {
+        List<Tab> departmentTabs = departmentTabPane.getTabs();
+        for (int d = 0; d < departmentTabs.size(); d++) {
+            Tab departmentTab = departmentTabs.get(d);
+            if (!(departmentTab.getContent() instanceof TabPane categoryTabPane)) {
+                continue;
+            }
+            List<Tab> categoryTabs = categoryTabPane.getTabs();
+            for (int c = 0; c < categoryTabs.size(); c++) {
+                Tab categoryTab = categoryTabs.get(c);
+                TableView<LabResult> mappedTable = categoryTabTableMap.get(categoryTab);
+                if (mappedTable == table) {
+                    return new TabLocation(d, c, categoryTab);
+                }
+            }
+        }
+        return null;
+    }
+
+    private TabLocation findNextTabLocation(TabLocation currentLocation) {
+        List<Tab> departmentTabs = departmentTabPane.getTabs();
+        for (int d = currentLocation.departmentIndex; d < departmentTabs.size(); d++) {
+            Tab departmentTab = departmentTabs.get(d);
+            if (!(departmentTab.getContent() instanceof TabPane categoryTabPane)) {
+                continue;
+            }
+
+            List<Tab> categoryTabs = categoryTabPane.getTabs();
+            int startCategory = d == currentLocation.departmentIndex ? currentLocation.categoryIndex + 1 : 0;
+            for (int c = startCategory; c < categoryTabs.size(); c++) {
+                Tab categoryTab = categoryTabs.get(c);
+                TableView<LabResult> table = categoryTabTableMap.get(categoryTab);
+                if (table != null && !table.getItems().isEmpty()) {
+                    return new TabLocation(d, c, categoryTab);
+                }
+            }
+        }
+        return null;
+    }
+
+    private void selectTabAndEditFirstRow(TabLocation location) {
+        if (location == null) {
+            return;
+        }
+
+        Tab departmentTab = departmentTabPane.getTabs().get(location.departmentIndex);
+        if (!(departmentTab.getContent() instanceof TabPane categoryTabPane)) {
+            return;
+        }
+
+        Tab categoryTab = categoryTabPane.getTabs().get(location.categoryIndex);
+        TableView<LabResult> table = categoryTabTableMap.get(categoryTab);
+        if (table == null || table.getItems().isEmpty()) {
+            return;
+        }
+
+        adjustingSelection = true;
+        Platform.runLater(() -> {
+            departmentTabPane.getSelectionModel().select(location.departmentIndex);
+            categoryTabPane.getSelectionModel().select(location.categoryIndex);
+            activeResultsTable = table;
+            table.requestFocus();
+            TableColumn<LabResult, ?> valueColumn = table.getColumns().size() > 1 ? table.getColumns().get(1) : null;
+            if (valueColumn != null) {
+                table.getSelectionModel().clearAndSelect(0, valueColumn);
+                table.getFocusModel().focus(0, valueColumn);
+                table.scrollTo(0);
+                Platform.runLater(() -> {
+                    table.edit(0, valueColumn);
+                    adjustingSelection = false;
+                });
+            } else {
+                adjustingSelection = false;
+            }
+        });
+    }
+
+    private record TabLocation(int departmentIndex, int categoryIndex, Tab categoryTab) {
+    }
+
+    private void focusSaveButton() {
+        if (saveButton == null) {
+            return;
+        }
+        Platform.runLater(() -> {
+            saveButton.requestFocus();
+            saveButton.setDefaultButton(true);
+            Platform.runLater(saveButton::requestFocus);
+        });
     }
 
     private void refreshActiveTableFromSelection() {
@@ -584,6 +772,17 @@ public class ResultEntryController {
             allResults.addAll(table.getItems());
         }
         return allResults;
+    }
+
+    private boolean hasAnyEnteredResults() {
+        for (TableView<LabResult> table : resultTables) {
+            for (LabResult result : table.getItems()) {
+                if (result != null && result.getResultValue() != null && !result.getResultValue().trim().isEmpty()) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private String getDepartmentName(LabResult result) {

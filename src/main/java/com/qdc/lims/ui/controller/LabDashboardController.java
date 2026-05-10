@@ -14,8 +14,17 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.control.Button;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Label;
+import javafx.scene.control.MenuBar;
+import javafx.scene.control.Tab;
+import javafx.scene.control.TabPane;
+import javafx.scene.control.Tooltip;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
-import javafx.scene.control.*;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 import org.springframework.context.ApplicationContext;
@@ -40,6 +49,18 @@ public class LabDashboardController {
     private Label completedCountLabel;
     @FXML
     private Label footerBrandLabel;
+    @FXML
+    private MenuBar dashboardMenuBar;
+    @FXML
+    private Button logoutButton;
+    @FXML
+    private Button viewWorklistButton;
+    @FXML
+    private Button viewCompletedButton;
+    @FXML
+    private VBox pendingTestsCard;
+    @FXML
+    private VBox completedTodayCard;
 
     @FXML
     private Button switchRoleButton;
@@ -94,6 +115,46 @@ public class LabDashboardController {
         }
 
         applyBranding();
+        setupKeyboardAndFocusAccessibility();
+    }
+
+    private void setupKeyboardAndFocusAccessibility() {
+        setupCardKeyboardAccess(pendingTestsCard, this::handleWorklist);
+        setupCardKeyboardAccess(completedTodayCard, this::handleCompletedTests);
+        applyFocusRing(pendingTestsCard);
+        applyFocusRing(completedTodayCard);
+        applyFocusRing(logoutButton);
+        applyFocusRing(viewWorklistButton);
+        applyFocusRing(viewCompletedButton);
+        applyFocusRing(dashboardMenuBar);
+    }
+
+    private void setupCardKeyboardAccess(VBox card, Runnable action) {
+        if (card == null || action == null) {
+            return;
+        }
+        card.setFocusTraversable(true);
+        card.setOnKeyPressed(event -> {
+            if (event.getCode() == KeyCode.ENTER || event.getCode() == KeyCode.SPACE) {
+                action.run();
+                event.consume();
+            }
+        });
+    }
+
+    private void applyFocusRing(Node node) {
+        if (node == null) {
+            return;
+        }
+        String baseStyle = node.getStyle() == null ? "" : node.getStyle();
+        node.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
+            if (isFocused) {
+                node.setStyle(baseStyle
+                        + "; -fx-border-color: #1f6feb; -fx-border-width: 2; -fx-border-radius: 8;");
+            } else {
+                node.setStyle(baseStyle);
+            }
+        });
     }
 
     /**
@@ -236,6 +297,16 @@ public class LabDashboardController {
     @FXML
     private void handleCompletedTests() {
         openWorklistInCurrentTab(true);
+    }
+
+    @FXML
+    private void handlePendingCardClick(MouseEvent event) {
+        handleWorklist();
+    }
+
+    @FXML
+    private void handleCompletedCardClick(MouseEvent event) {
+        handleCompletedTests();
     }
 
     private void openWorklistInCurrentTab(boolean showCompleted) {

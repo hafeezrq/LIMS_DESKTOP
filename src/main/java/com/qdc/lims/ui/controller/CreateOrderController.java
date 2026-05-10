@@ -21,6 +21,7 @@ import javafx.scene.control.*;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
+import javafx.scene.input.KeyCode;
 import javafx.stage.Stage;
 import javafx.util.StringConverter;
 import org.springframework.stereotype.Component;
@@ -73,7 +74,16 @@ public class CreateOrderController {
     private Label messageLabel;
 
     @FXML
+    private Button createOrderButton;
+
+    @FXML
     private ListView<String> selectedTestsListView;
+    @FXML
+    private Button searchButton;
+    @FXML
+    private Button clearButton;
+    @FXML
+    private Button closeButton;
 
     private final PatientRepository patientRepository;
     private final DoctorRepository doctorRepository;
@@ -99,6 +109,8 @@ public class CreateOrderController {
     private boolean suppressPanelDeselectCascade = false;
 
     private ObservableList<String> selectedTestNames = FXCollections.observableArrayList();
+    private int testsPerRowHint = 4;
+    private boolean orderCreatedInCurrentSession = false;
 
     public CreateOrderController(PatientRepository patientRepository,
             DoctorRepository doctorRepository,
@@ -116,6 +128,9 @@ public class CreateOrderController {
 
     @FXML
     private void initialize() {
+        selectedPatient = null;
+        orderCreatedInCurrentSession = false;
+
         // Load doctors
         loadDoctors();
 
@@ -131,8 +146,31 @@ public class CreateOrderController {
         messageLabel.setText("");
         totalAmountLabel.setText(localeFormatService.formatCurrency(java.math.BigDecimal.ZERO));
         balanceLabel.setText(localeFormatService.formatCurrency(java.math.BigDecimal.ZERO));
+        patientInfoBox.setVisible(false);
+        patientInfoBox.setManaged(false);
 
         patientSearchField.setOnAction(event -> handleSearchPatient());
+        patientSearchField.setFocusTraversable(true);
+        doctorComboBox.setFocusTraversable(true);
+        discountField.setFocusTraversable(true);
+        cashPaidField.setFocusTraversable(true);
+        if (createOrderButton != null) {
+            createOrderButton.setFocusTraversable(true);
+            createOrderButton.setDefaultButton(false);
+        }
+        discountField.setOnAction(event -> cashPaidField.requestFocus());
+        cashPaidField.setOnAction(event -> {
+            if (createOrderButton != null) {
+                createOrderButton.requestFocus();
+                createOrderButton.fire();
+            } else {
+                handleCreateOrder();
+            }
+        });
+        setupEscHandler();
+        setupFocusIndicators();
+        setupBottomButtonTabCycle();
+        setupTestsTabKeyboardFlow();
     }
 
     /**
@@ -141,7 +179,7 @@ public class CreateOrderController {
     public void setPreselectedPatient(Patient patient) {
         if (patient != null) {
             selectedPatient = patient;
-            patientSearchField.setText(patient.getMrn());
+            patientSearchField.setText(patient.getFullName());
 
             // Display patient info
             patientNameLabel.setText(patient.getFullName() + " (MRN: " + patient.getMrn() + ")");
@@ -412,6 +450,26 @@ public class CreateOrderController {
         checkBox.setStyle("-fx-font-size: 12; -fx-cursor: hand;");
         checkBox.setMinWidth(200);
         checkBox.setMaxWidth(280);
+        checkBox.setFocusTraversable(true);
+        checkBox.focusedProperty().addListener((obs, old, focused) -> {
+            if (focused) {
+                checkBox.setStyle("-fx-font-size: 12; -fx-cursor: hand; -fx-border-color: #f39c12; -fx-border-width: 2; -fx-border-radius: 4;");
+            } else {
+                checkBox.setStyle("-fx-font-size: 12; -fx-cursor: hand;");
+            }
+        });
+        checkBox.setOnKeyPressed(event -> {
+            if (event.getCode() == KeyCode.TAB) {
+                moveToAdjacentTestTabOrBilling(event.isShiftDown() ? -1 : 1);
+                event.consume();
+                return;
+            }
+            if (event.getCode() == KeyCode.LEFT || event.getCode() == KeyCode.RIGHT
+                    || event.getCode() == KeyCode.UP || event.getCode() == KeyCode.DOWN) {
+                moveCheckBoxFocus(checkBox, event.getCode());
+                event.consume();
+            }
+        });
         checkBox.selectedProperty().addListener((obs, wasSelected, isSelected) -> {
             if (isSelected) {
                 selectedTests.add(test);
@@ -533,6 +591,7 @@ public class CreateOrderController {
 
         // Display patient info
         selectedPatient = patient;
+        patientSearchField.setText(patient.getFullName());
         patientNameLabel.setText(patient.getFullName() + " (MRN: " + patient.getMrn() + ")");
         patientDetailsLabel.setText(
                 "Age: " + localeFormatService.formatAge(patient.getAge(), patient.getAgeUnit()) + " | " +
@@ -543,6 +602,7 @@ public class CreateOrderController {
         patientInfoBox.setVisible(true);
         patientInfoBox.setManaged(true);
         messageLabel.setText("");
+        doctorComboBox.requestFocus();
     }
 
     private void updateTotalAmount() {
@@ -626,6 +686,17 @@ public class CreateOrderController {
             return;
         }
 
+        if (isMoneyUntouched()) {
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+            confirm.setTitle("No Payment Entered");
+            confirm.setHeaderText("No cash/discount entered.");
+            confirm.setContentText(
+                    "No money is being paid now, and full bill will stay due.\nProceed to create order?");
+            if (confirm.showAndWait().filter(ButtonType.OK::equals).isEmpty()) {
+                return;
+            }
+        }
+
         // Get doctor (nullable)
         Doctor selectedDoctor = doctorComboBox.getValue();
         Long doctorId = (selectedDoctor != null && selectedDoctor.getId() != null)
@@ -652,6 +723,7 @@ public class CreateOrderController {
         // Create order
         try {
             LabOrder order = orderService.createOrder(request);
+            orderCreatedInCurrentSession = true;
 
             // Show print receipt dialog
             showPrintReceiptDialog(order);
@@ -699,7 +771,9 @@ public class CreateOrderController {
 
         Button printNormalBtn = new Button("🖨 Normal Print");
         printNormalBtn.getStyleClass().add("btn-primary");
+        final boolean[] handledAction = { false };
         printNormalBtn.setOnAction(e -> {
+            handledAction[0] = true;
             printReceipt(order, "NORMAL");
             dialog.close();
             closeCreateOrderWindow();
@@ -708,6 +782,7 @@ public class CreateOrderController {
         Button printThermalBtn = new Button("🧾 Thermal Print");
         printThermalBtn.getStyleClass().add("btn-purple");
         printThermalBtn.setOnAction(e -> {
+            handledAction[0] = true;
             printReceipt(order, "THERMAL");
             dialog.close();
             closeCreateOrderWindow();
@@ -716,6 +791,7 @@ public class CreateOrderController {
         Button skipBtn = new Button("Skip Print");
         skipBtn.getStyleClass().add("btn-secondary");
         skipBtn.setOnAction(e -> {
+            handledAction[0] = true;
             dialog.close();
             closeCreateOrderWindow();
         });
@@ -732,6 +808,11 @@ public class CreateOrderController {
 
         // Hide the default close button since we have our own buttons
         dialog.getDialogPane().lookupButton(ButtonType.CLOSE).setVisible(false);
+        dialog.setOnHidden(event -> {
+            if (!handledAction[0]) {
+                showSuccess("Order #" + order.getId() + " created successfully. Receipt was not printed.");
+            }
+        });
 
         dialog.showAndWait();
     }
@@ -960,6 +1041,9 @@ public class CreateOrderController {
 
     @FXML
     private void handleClear() {
+        if (!confirmDiscardIfDirty("Clear Order Form", "Clear entered order details?")) {
+            return;
+        }
         patientSearchField.clear();
         patientInfoBox.setVisible(false);
         patientInfoBox.setManaged(false);
@@ -991,6 +1075,9 @@ public class CreateOrderController {
 
     @FXML
     private void handleClose() {
+        if (!confirmDiscardIfDirty("Close Create Order", "Close this form?")) {
+            return;
+        }
         Stage stage = (Stage) patientSearchField.getScene().getWindow();
         stage.close();
     }
@@ -1007,6 +1094,230 @@ public class CreateOrderController {
     private void showSuccess(String message) {
         messageLabel.setText("✓ " + message);
         messageLabel.setStyle("-fx-text-fill: #27ae60; -fx-font-weight: bold;");
+    }
+
+    private boolean isMoneyUntouched() {
+        return (discountField.getText() == null || discountField.getText().trim().isEmpty())
+                && (cashPaidField.getText() == null || cashPaidField.getText().trim().isEmpty());
+    }
+
+    private void setupEscHandler() {
+        patientSearchField.sceneProperty().addListener((obs, oldScene, newScene) -> {
+            if (newScene == null) {
+                return;
+            }
+            newScene.setOnKeyPressed(event -> {
+                if (event.getCode() == KeyCode.ESCAPE) {
+                    handleClose();
+                    event.consume();
+                }
+            });
+        });
+    }
+
+    private void setupFocusIndicators() {
+        applyFocusIndicator(patientSearchField);
+        applyFocusIndicator(discountField);
+        applyFocusIndicator(cashPaidField);
+        applyFocusIndicator(doctorComboBox);
+        applyFocusIndicator(searchButton);
+        applyFocusIndicator(createOrderButton);
+        applyFocusIndicator(clearButton);
+        applyFocusIndicator(closeButton);
+        applyFocusIndicator(categoryTabPane);
+    }
+
+    private void applyFocusIndicator(Control control) {
+        if (control == null) {
+            return;
+        }
+        control.focusedProperty().addListener((obs, old, focused) -> {
+            if (focused) {
+                control.setStyle("-fx-border-color: #f39c12; -fx-border-width: 2; -fx-border-radius: 4;");
+            } else {
+                control.setStyle("");
+            }
+        });
+    }
+
+    private void setupBottomButtonTabCycle() {
+        createOrderButton.setOnKeyPressed(event -> {
+            if (event.getCode() == KeyCode.TAB) {
+                if (event.isShiftDown()) {
+                    cashPaidField.requestFocus();
+                } else {
+                    clearButton.requestFocus();
+                }
+                event.consume();
+            }
+        });
+        clearButton.setOnKeyPressed(event -> {
+            if (event.getCode() == KeyCode.ENTER) {
+                handleClear();
+                event.consume();
+                return;
+            }
+            if (event.getCode() == KeyCode.TAB) {
+                if (event.isShiftDown()) {
+                    createOrderButton.requestFocus();
+                } else {
+                    closeButton.requestFocus();
+                }
+                event.consume();
+            }
+        });
+        closeButton.setOnKeyPressed(event -> {
+            if (event.getCode() == KeyCode.ENTER) {
+                handleClose();
+                event.consume();
+                return;
+            }
+            if (event.getCode() == KeyCode.TAB) {
+                if (event.isShiftDown()) {
+                    clearButton.requestFocus();
+                } else {
+                    patientSearchField.requestFocus();
+                }
+                event.consume();
+            }
+        });
+    }
+
+    private void setupTestsTabKeyboardFlow() {
+        categoryTabPane.setOnKeyPressed(event -> {
+            if (event.getCode() == KeyCode.TAB) {
+                moveToAdjacentTestTabOrBilling(event.isShiftDown() ? -1 : 1);
+                event.consume();
+            }
+        });
+    }
+
+    private void moveToAdjacentTestTabOrBilling(int delta) {
+        Tab departmentTab = categoryTabPane.getSelectionModel().getSelectedItem();
+        if (departmentTab == null || !(departmentTab.getContent() instanceof TabPane subTabPane)) {
+            return;
+        }
+
+        int deptIndex = categoryTabPane.getSelectionModel().getSelectedIndex();
+        int subIndex = subTabPane.getSelectionModel().getSelectedIndex();
+        int nextSub = subIndex + delta;
+
+        if (nextSub >= 0 && nextSub < subTabPane.getTabs().size()) {
+            subTabPane.getSelectionModel().select(nextSub);
+            focusFirstCheckboxInCurrentSubTab();
+            return;
+        }
+
+        int nextDept = deptIndex + delta;
+        if (nextDept < 0 || nextDept >= categoryTabPane.getTabs().size()) {
+            if (delta > 0) {
+                discountField.requestFocus();
+            } else {
+                doctorComboBox.requestFocus();
+            }
+            return;
+        }
+        categoryTabPane.getSelectionModel().select(nextDept);
+        Tab newDeptTab = categoryTabPane.getSelectionModel().getSelectedItem();
+        if (newDeptTab != null && newDeptTab.getContent() instanceof TabPane newSubTabPane
+                && !newSubTabPane.getTabs().isEmpty()) {
+            if (delta > 0) {
+                newSubTabPane.getSelectionModel().select(0);
+            } else {
+                newSubTabPane.getSelectionModel().select(newSubTabPane.getTabs().size() - 1);
+            }
+        }
+        focusFirstCheckboxInCurrentSubTab();
+    }
+
+    private void focusFirstCheckboxInCurrentSubTab() {
+        Tab departmentTab = categoryTabPane.getSelectionModel().getSelectedItem();
+        if (departmentTab == null || !(departmentTab.getContent() instanceof TabPane subTabPane)) {
+            return;
+        }
+        Tab subTab = subTabPane.getSelectionModel().getSelectedItem();
+        if (subTab == null || !(subTab.getContent() instanceof ScrollPane scrollPane)) {
+            return;
+        }
+        if (!(scrollPane.getContent() instanceof VBox contentRoot)) {
+            return;
+        }
+        CheckBox first = findFirstCheckBox(contentRoot);
+        if (first != null) {
+            first.requestFocus();
+        }
+    }
+
+    private CheckBox findFirstCheckBox(VBox container) {
+        for (var node : container.getChildren()) {
+            if (node instanceof FlowPane pane) {
+                for (var child : pane.getChildren()) {
+                    if (child instanceof CheckBox cb) {
+                        return cb;
+                    }
+                }
+            } else if (node instanceof VBox nested) {
+                CheckBox nestedResult = findFirstCheckBox(nested);
+                if (nestedResult != null) {
+                    return nestedResult;
+                }
+            }
+        }
+        return null;
+    }
+
+    private void moveCheckBoxFocus(CheckBox current, KeyCode keyCode) {
+        if (!(current.getParent() instanceof FlowPane pane)) {
+            return;
+        }
+        int currentIndex = pane.getChildren().indexOf(current);
+        if (currentIndex < 0) {
+            return;
+        }
+        int delta = switch (keyCode) {
+            case LEFT -> -1;
+            case RIGHT -> 1;
+            case UP -> -testsPerRowHint;
+            case DOWN -> testsPerRowHint;
+            default -> 0;
+        };
+        int targetIndex = currentIndex + delta;
+        if (targetIndex < 0 || targetIndex >= pane.getChildren().size()) {
+            return;
+        }
+        if (pane.getChildren().get(targetIndex) instanceof CheckBox target) {
+            target.requestFocus();
+        }
+    }
+
+    private boolean confirmDiscardIfDirty(String title, String header) {
+        if (!isFormDirty()) {
+            return true;
+        }
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        confirm.setTitle(title);
+        confirm.setHeaderText(header);
+        confirm.setContentText("You have unsaved order information that will be lost.");
+        return confirm.showAndWait().filter(ButtonType.OK::equals).isPresent();
+    }
+
+    private boolean isFormDirty() {
+        if (orderCreatedInCurrentSession) {
+            return false;
+        }
+        if (selectedPatient != null) {
+            return true;
+        }
+        if (!selectedTests.isEmpty() || !selectedPanelIds.isEmpty()) {
+            return true;
+        }
+        if (discountField.getText() != null && !discountField.getText().trim().isEmpty()) {
+            return true;
+        }
+        if (cashPaidField.getText() != null && !cashPaidField.getText().trim().isEmpty()) {
+            return true;
+        }
+        return patientSearchField.getText() != null && !patientSearchField.getText().trim().isEmpty();
     }
 
     private Patient showPatientSelectionDialog(List<Patient> patients) {

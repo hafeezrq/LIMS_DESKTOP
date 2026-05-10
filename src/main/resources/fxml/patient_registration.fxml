@@ -86,13 +86,13 @@
                 
                 <!-- Buttons -->
                 <HBox spacing="15" alignment="CENTER">
-                    <Button text="Register Patient" onAction="#handleRegister" 
+                    <Button fx:id="registerButton" text="Register Patient" onAction="#handleRegister" 
                             styleClass="btn-success"
                             prefWidth="160"/>
-                    <Button text="Clear Form" onAction="#handleClear" 
+                    <Button fx:id="clearButton" text="Clear Form" onAction="#handleClear" 
                             styleClass="btn-secondary"
                             prefWidth="120"/>
-                    <Button text="Close" onAction="#handleClose" 
+                    <Button fx:id="closeButton" text="Close" onAction="#handleClose" 
                             styleClass="btn-danger"
                             prefWidth="100"/>
                 </HBox>

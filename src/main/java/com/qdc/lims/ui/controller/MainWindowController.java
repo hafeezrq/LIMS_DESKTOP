@@ -168,6 +168,7 @@ public class MainWindowController {
         setupButtonHoverEffect(labLoginBtn, "#9b59b6", "#8e44ad");
         setupButtonHoverEffect(adminLoginBtn, "#e74c3c", "#c0392b");
         setupButtonHoverEffect(exitBtn, "rgba(255,255,255,0.15)", "rgba(255,255,255,0.25)");
+        setupFocusRing(sessionTabs);
 
         // Handle tab selection changes - update SessionManager with the selected
         // session's user
@@ -401,11 +402,39 @@ public class MainWindowController {
                                 return;
                             }
                             handleFirstRun(stage);
+                            autoLoginStaffAtStartup();
                         });
                     }
                 }
             });
         });
+    }
+
+    private void autoLoginStaffAtStartup() {
+        if (!tabSessions.isEmpty()) {
+            return;
+        }
+
+        Optional<User> staffUserOpt = userRepository.findAll().stream()
+                .filter(user -> user != null
+                        && user.hasRole("ROLE_STAFF")
+                        && user.isEnabled()
+                        && user.isAccountNonLocked()
+                        && user.isAccountNonExpired()
+                        && user.isCredentialsNonExpired())
+                .findFirst();
+
+        if (staffUserOpt.isEmpty()) {
+            return;
+        }
+
+        User staffUser = authService.authenticateWithoutPassword(staffUserOpt.get().getUsername());
+        if (staffUser == null) {
+            return;
+        }
+
+        createSessionTab(staffUser, DashboardType.RECEPTION);
+        setStatus("Auto-logged in as staff: " + staffUser.getUsername());
     }
 
     private void handleFirstRun(Stage owner) {
@@ -1427,8 +1456,33 @@ public class MainWindowController {
         String hoverStyle = baseStyle.replaceFirst("-fx-background-color: [^;]+;",
                 "-fx-background-color: " + hoverColor + ";");
 
-        button.setOnMouseEntered(e -> button.setStyle(hoverStyle));
-        button.setOnMouseExited(e -> button.setStyle(normalStyle));
+        Runnable applyStyle = () -> {
+            String computedStyle = button.isHover() && !button.isDisabled() ? hoverStyle : normalStyle;
+            if (button.isFocused()) {
+                computedStyle += "; -fx-border-color: #f1c40f; -fx-border-width: 2; -fx-border-radius: 4;";
+            }
+            button.setStyle(computedStyle);
+        };
+        button.setOnMouseEntered(e -> applyStyle.run());
+        button.setOnMouseExited(e -> applyStyle.run());
+        button.focusedProperty().addListener((obs, oldVal, newVal) -> applyStyle.run());
+        button.disabledProperty().addListener((obs, oldVal, newVal) -> applyStyle.run());
+        applyStyle.run();
+    }
+
+    private void setupFocusRing(Control control) {
+        if (control == null) {
+            return;
+        }
+        String baseStyle = control.getStyle() == null ? "" : control.getStyle();
+        control.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
+            if (isFocused) {
+                control.setStyle(baseStyle
+                        + "; -fx-border-color: #f1c40f; -fx-border-width: 2; -fx-border-radius: 4;");
+            } else {
+                control.setStyle(baseStyle);
+            }
+        });
     }
 
     private void showError(String title, String message) {

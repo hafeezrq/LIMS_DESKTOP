@@ -31,7 +31,7 @@
                         <HBox spacing="15" alignment="CENTER_LEFT">
                             <Label text="Search Patient by MRN or Name:" style="-fx-font-weight: bold;"/>
                             <TextField fx:id="patientSearchField" promptText="Enter MRN or name..." prefWidth="300"/>
-                            <Button text="Search" onAction="#handleSearchPatient" styleClass="btn-primary"/>
+                            <Button fx:id="searchButton" text="Search" onAction="#handleSearchPatient" styleClass="btn-primary"/>
                         </HBox>
                         <VBox fx:id="patientInfoBox" spacing="5"
                               style="-fx-background-color: #eaf6fb; -fx-padding: 15; -fx-background-radius: 5; -fx-border-color: #3498db; -fx-border-width: 2;">
@@ -98,9 +98,9 @@
                     <Label fx:id="messageLabel" wrapText="true" style="-fx-font-size: 12;"/>
                     
                     <HBox spacing="15" alignment="CENTER">
-                        <Button text="Create Order" onAction="#handleCreateOrder" styleClass="btn-success" prefWidth="160"/>
-                        <Button text="Clear" onAction="#handleClear" styleClass="btn-secondary" prefWidth="120"/>
-                        <Button text="Close" onAction="#handleClose" styleClass="btn-danger" prefWidth="100"/>
+                        <Button fx:id="createOrderButton" text="Create Order" onAction="#handleCreateOrder" styleClass="btn-success" prefWidth="160"/>
+                        <Button fx:id="clearButton" text="Clear" onAction="#handleClear" styleClass="btn-secondary" prefWidth="120"/>
+                        <Button fx:id="closeButton" text="Close" onAction="#handleClose" styleClass="btn-danger" prefWidth="100"/>
                     </HBox>
                 </VBox>
             </content>
