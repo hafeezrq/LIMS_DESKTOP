@@ -245,6 +245,9 @@ public class ReceptionDashboardController {
         ensureOrdersTabsVisible();
         localeFormatService.applyDatePickerLocale(deliveredFromDatePicker, deliveredToDatePicker);
         initializeDeliveredDateRange();
+        if (deliveredSearchField != null) {
+            deliveredSearchField.setOnAction(event -> handleSearchDelivered());
+        }
         setupKeyboardAccessibility();
         loadOrders();
         startAutoRefresh();
@@ -1475,21 +1478,23 @@ public class ReceptionDashboardController {
                     continue;
                 }
 
-                markAsDelivered(freshOrder);
+                markAsDelivered(freshOrder, !reprintMode);
                 break;
             }
 
             if (result.get() == markDeliveredBtn) {
-                markAsDelivered(freshOrder);
+                markAsDelivered(freshOrder, !reprintMode);
                 break;
             }
         }
     }
 
-    private void markAsDelivered(LabOrder order) {
+    private void markAsDelivered(LabOrder order, boolean showConfirmation) {
         try {
             reportPrintProgressService.markDelivered(order, getCurrentUsername());
-            showAlert("Report Delivered", "Report for Order #" + order.getId() + " has been marked as delivered.");
+            if (showConfirmation) {
+                showAlert("Report Delivered", "Report for Order #" + order.getId() + " has been marked as delivered.");
+            }
             loadOrders();
         } catch (ObjectOptimisticLockingFailureException e) {
             showError("This order was updated by another user. Please refresh and try again.");
@@ -1569,6 +1574,7 @@ public class ReceptionDashboardController {
         patientInfo.setHgap(12);
         patientInfo.setVgap(1);
         patientInfo.setStyle("-fx-border-color: #444444; -fx-border-width: 0.5; -fx-border-insets: 0;");
+        patientInfo.setPadding(new Insets(4, 8, 4, 8));
         patientInfo.setMinHeight(Region.USE_PREF_SIZE);
         patientInfo.setPrefHeight(Region.USE_COMPUTED_SIZE);
         patientInfo.setMaxHeight(Region.USE_PREF_SIZE);
@@ -1967,14 +1973,13 @@ public class ReceptionDashboardController {
         // 2. Position the box in the Top-Right corner
         StackPane.setAlignment(patientInfo, Pos.TOP_RIGHT);
 
-        // 3. CALCULATION FOR PERFECT 0.5 INCH ALIGNMENT
-        // Desired distance from physical edge = 36 points (0.5 inch)
-        double targetTopPoints = 36.0 + resolvePatientInfoOffsetYPoints();
-        double targetRightPoints = 36.0;
-
-        // Subtract what the printer is already enforcing
-        double appliedTopMargin = Math.max(0, targetTopPoints - pageLayout.getTopMargin());
-        double appliedRightMargin = Math.max(0, targetRightPoints - pageLayout.getRightMargin());
+        // 3. Positioning baseline inside the printable area.
+        // This page is already sized to printable bounds, so offsets should be
+        // applied directly instead of subtracting printer hardware margins.
+        double appliedTopMargin = 36.0 + resolvePatientInfoOffsetYPoints();
+        // Keep X anchoring device-independent so preview and Print-to-PDF stay
+        // aligned even when printer drivers report different hardware margins.
+        double appliedRightMargin = 20.0;
         StackPane.setMargin(patientInfo, new Insets(appliedTopMargin, appliedRightMargin, 0, 0));
 
         // 4. Add the box to the page StackPane
