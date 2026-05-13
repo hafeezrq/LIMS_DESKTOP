@@ -1965,10 +1965,20 @@ public class ReceptionDashboardController {
 
     private void attachPatientHeader(StackPane page, GridPane patientInfo, double printableWidth,
             PageLayout pageLayout) {
-        // 1. Calculate a proportional width for the box (about 40% of the page)
-        double headerWidth = printableWidth * 0.40;
-        patientInfo.setPrefWidth(headerWidth);
-        patientInfo.setMaxWidth(headerWidth);
+        // Letterhead layout targets (inches converted to points):
+        // - top baseline: 0.5"
+        // - printed head width: 4.0"
+        // - gap between head and patient box: 0.2"
+        // - right-side breathing room: 0.5"
+        double headWidthPts = 4.0 * 72.0;
+        double headToPatientGapPts = 0.2 * 72.0;
+        double rightGutterPts = 0.5 * 72.0;
+
+        double patientLeftEdgePts = headWidthPts + headToPatientGapPts;
+        double computedBoxWidth = printableWidth - patientLeftEdgePts - rightGutterPts;
+        double boxWidth = Math.max(170.0, computedBoxWidth);
+        patientInfo.setPrefWidth(boxWidth);
+        patientInfo.setMaxWidth(boxWidth);
 
         // 2. Position the box in the Top-Right corner
         StackPane.setAlignment(patientInfo, Pos.TOP_RIGHT);
@@ -1976,10 +1986,12 @@ public class ReceptionDashboardController {
         // 3. Positioning baseline inside the printable area.
         // This page is already sized to printable bounds, so offsets should be
         // applied directly instead of subtracting printer hardware margins.
-        double appliedTopMargin = 36.0 + resolvePatientInfoOffsetYPoints();
+        // Target absolute 0.5" from the physical paper top by compensating for
+        // printer-reported top margin (printable-area origin).
+        double appliedTopMargin = (36.0 - pageLayout.getTopMargin()) + resolvePatientInfoOffsetYPoints();
         // Keep X anchoring device-independent so preview and Print-to-PDF stay
         // aligned even when printer drivers report different hardware margins.
-        double appliedRightMargin = 20.0;
+        double appliedRightMargin = Math.max(0.0, printableWidth - patientLeftEdgePts - boxWidth);
         StackPane.setMargin(patientInfo, new Insets(appliedTopMargin, appliedRightMargin, 0, 0));
 
         // 4. Add the box to the page StackPane
