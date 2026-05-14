@@ -1989,6 +1989,7 @@ public class ReceptionDashboardController {
         // Target absolute 0.5" from the physical paper top by compensating for
         // printer-reported top margin (printable-area origin).
         double appliedTopMargin = (36.0 - pageLayout.getTopMargin()) + resolvePatientInfoOffsetYPoints();
+        appliedTopMargin = Math.max(0.0, appliedTopMargin);
         // Keep X anchoring device-independent so preview and Print-to-PDF stay
         // aligned even when printer drivers report different hardware margins.
         double appliedRightMargin = Math.max(0.0, printableWidth - patientLeftEdgePts - boxWidth);
