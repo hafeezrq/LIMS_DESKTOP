@@ -2,6 +2,7 @@ package com.qdc.lims.service;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.qdc.lims.ui.AppPaths;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -77,9 +78,14 @@ public class UpdateService {
             throw new IOException("Download failed (" + response.statusCode() + ").");
         }
 
-        Path tempFile = Files.createTempFile("lims-update-", ".exe");
+        Path updatesDir = AppPaths.appDataDir().resolve("updates");
+        Files.createDirectories(updatesDir);
+        Path tempFile = updatesDir.resolve("lims-update-" + System.currentTimeMillis() + ".exe");
         try (InputStream input = response.body()) {
             Files.copy(input, tempFile, StandardCopyOption.REPLACE_EXISTING);
+        }
+        if (!Files.exists(tempFile) || Files.size(tempFile) == 0L) {
+            throw new IOException("Downloaded installer is missing or empty.");
         }
         return tempFile;
     }
@@ -91,7 +97,35 @@ public class UpdateService {
         if (!isInstallerSupported()) {
             throw new IOException("Installer updates are only supported on Windows.");
         }
-        new ProcessBuilder("cmd", "/c", "start", "", installerPath.toString()).start();
+
+        IOException failure = null;
+        for (List<String> command : launchCommands(installerPath)) {
+            try {
+                Process process = new ProcessBuilder(command).start();
+                if (process == null) {
+                    continue;
+                }
+                return;
+            } catch (IOException ex) {
+                failure = ex;
+            }
+        }
+
+        String details = "Failed to launch installer at: " + installerPath
+                + " (size=" + Files.size(installerPath) + " bytes)";
+        if (failure != null && failure.getMessage() != null && !failure.getMessage().isBlank()) {
+            details += ". Last error: " + failure.getMessage();
+        }
+        throw new IOException(details, failure);
+    }
+
+    private List<List<String>> launchCommands(Path installerPath) {
+        String installer = installerPath.toAbsolutePath().toString();
+        return List.of(
+                List.of(installer),
+                List.of("cmd", "/c", "start", "", "\"" + installer + "\""),
+                List.of("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
+                        "-Command", "Start-Process -FilePath '" + installer.replace("'", "''") + "'"));
     }
 
     private GitHubRelease fetchLatestRelease() throws IOException, InterruptedException {
