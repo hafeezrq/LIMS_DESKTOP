@@ -1607,7 +1607,7 @@ public class ReceptionDashboardController {
             attachPatientHeader(pages.get(pages.size() - 1), patientInfo, printableWidth, pageLayout);
             addNodeToPage(pageContext, createSpacer(6), contentWidth);
         } else {
-            VBox blankHeader = createBlankPaperHeader(order, patientInfo, contentWidth);
+            VBox blankHeader = createBlankPaperHeader(patientInfo, contentWidth);
             addNodeToPage(pageContext, blankHeader, contentWidth);
             addNodeToPage(pageContext, createSpacer(6), contentWidth);
         }
@@ -1988,7 +1988,8 @@ public class ReceptionDashboardController {
         // applied directly instead of subtracting printer hardware margins.
         // Target absolute 0.5" from the physical paper top by compensating for
         // printer-reported top margin (printable-area origin).
-        double appliedTopMargin = (36.0 - pageLayout.getTopMargin()) + resolvePatientInfoOffsetYPoints();
+        double appliedTopMargin = (36.0 - pageLayout.getTopMargin()) + resolvePatientInfoOffsetYPoints()
+                - (5.0 * POINTS_PER_MM);
         appliedTopMargin = Math.max(0.0, appliedTopMargin);
         // Keep X anchoring device-independent so preview and Print-to-PDF stay
         // aligned even when printer drivers report different hardware margins.
@@ -1999,11 +2000,9 @@ public class ReceptionDashboardController {
         page.getChildren().add(patientInfo);
     }
 
-    private VBox createBlankPaperHeader(LabOrder order, GridPane patientInfo, double contentWidth) {
+    private VBox createBlankPaperHeader(GridPane patientInfo, double contentWidth) {
         Label reportTitle = new Label(brandingService.getReportHeaderText());
         reportTitle.setStyle("-fx-font-size: 12; -fx-font-weight: bold;");
-        Label orderLabel = new Label("Order #" + order.getId());
-        orderLabel.setStyle("-fx-font-size: 9;");
 
         double patientBoxWidth = Math.min(contentWidth, 460);
         patientInfo.setPrefWidth(patientBoxWidth);
@@ -2012,7 +2011,7 @@ public class ReceptionDashboardController {
         Separator separator = new Separator();
         separator.setPrefWidth(contentWidth);
 
-        VBox header = new VBox(4, reportTitle, orderLabel, patientInfo, separator);
+        VBox header = new VBox(4, reportTitle, patientInfo, separator);
         header.setAlignment(Pos.TOP_CENTER);
         header.setPrefWidth(contentWidth);
         return header;
